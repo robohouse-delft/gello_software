@@ -34,7 +34,7 @@ class Args:
     robot_type: str = None  # only needed for quest agent or spacemouse agent
     hz: int = 100
     start_joints: Optional[Tuple[float, ...]] = None
-
+    no_gripper: bool = False
     gello_port: Optional[str] = None
     mock: bool = False
     use_save_interface: bool = False
@@ -93,8 +93,8 @@ def main(args):
 
         # System setup specific. This reset configuration works well on our setup. If you are mounting the robot
         # differently, you need a separate reset joint configuration.
-        reset_joints_left = np.deg2rad([0, -90, -90, -90, 90, 0, 0])
-        reset_joints_right = np.deg2rad([0, -90, 90, -90, -90, 0, 0])
+        reset_joints_left = np.deg2rad([0, -90, -90, -90, 90, 0, 0]) if not args.no_gripper else np.deg2rad([0, -90, -90, -90, 90, 0])
+        reset_joints_right = np.deg2rad([0, -90, 90, -90, -90, 0, 0]) if not args.no_gripper else np.deg2rad([0, -90, -90, -90, 90, 0])
         reset_joints = np.concatenate([reset_joints_left, reset_joints_right])
         curr_joints = env.get_obs()["joint_positions"]
         max_delta = (np.abs(curr_joints - reset_joints)).max()
@@ -119,6 +119,8 @@ def main(args):
                 reset_joints = np.deg2rad(
                     [0, -90, 90, -90, -90, 0, 0]
                 )  # Change this to your own reset joints
+                if args.no_gripper:
+                    reset_joints = reset_joints[:-1]
             else:
                 reset_joints = args.start_joints
             agent = GelloAgent(port=gello_port, start_joints=args.start_joints)
@@ -147,7 +149,7 @@ def main(args):
 
     # going to start position
     print("Going to start position")
-    start_pos = agent.act(env.get_obs())
+    start_pos = np.asarray(agent.act(env.get_obs()))
     obs = env.get_obs()
     joints = obs["joint_positions"]
 
