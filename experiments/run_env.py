@@ -93,8 +93,16 @@ def main(args):
 
         # System setup specific. This reset configuration works well on our setup. If you are mounting the robot
         # differently, you need a separate reset joint configuration.
-        reset_joints_left = np.deg2rad([0, -90, -90, -90, 90, 0, 0]) if not args.no_gripper else np.deg2rad([0, -90, -90, -90, 90, 0])
-        reset_joints_right = np.deg2rad([0, -90, 90, -90, -90, 0, 0]) if not args.no_gripper else np.deg2rad([0, -90, -90, -90, 90, 0])
+        reset_joints_left = (
+            np.deg2rad([0, -90, -90, -90, 90, 0, 0])
+            if not args.no_gripper
+            else np.deg2rad([0, -90, -90, -90, 90, 0])
+        )
+        reset_joints_right = (
+            np.deg2rad([0, -90, 90, -90, -90, 0, 0])
+            if not args.no_gripper
+            else np.deg2rad([0, -90, -90, -90, 90, 0])
+        )
         reset_joints = np.concatenate([reset_joints_left, reset_joints_right])
         curr_joints = env.get_obs()["joint_positions"]
         max_delta = (np.abs(curr_joints - reset_joints)).max()
@@ -173,9 +181,9 @@ def main(args):
         return
 
     print(f"Start pos: {len(start_pos)}", f"Joints: {len(joints)}")
-    assert len(start_pos) == len(
-        joints
-    ), f"agent output dim = {len(start_pos)}, but env dim = {len(joints)}"
+    assert len(start_pos) == len(joints), (
+        f"agent output dim = {len(start_pos)}, but env dim = {len(joints)}"
+    )
 
     max_delta = 0.05
     for _ in range(25):

@@ -49,9 +49,9 @@ class RobotEnv:
         Returns:
             obs: observation from the environment.
         """
-        assert len(joints) == (
-            self._robot.num_dofs()
-        ), f"input:{len(joints)}, robot:{self._robot.num_dofs()}"
+        assert len(joints) == (self._robot.num_dofs()), (
+            f"input:{len(joints)}, robot:{self._robot.num_dofs()}"
+        )
         assert self._robot.num_dofs() == len(joints)
         self._robot.command_joint_state(joints)
         self._rate.sleep()
