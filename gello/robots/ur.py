@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Union, List
 
 import numpy as np
 
@@ -8,7 +8,7 @@ from gello.robots.robot import Robot
 class URRobot(Robot):
     """A class representing a UR robot."""
 
-    def __init__(self, robot_ip: str = "192.168.1.10", no_gripper: bool = False):
+    def __init__(self, robot_ip: str, no_gripper: bool, start_position: Union[List, np.ndarray], x_limits: Union[List, np.ndarray], y_limits: Union[List, np.ndarray], z_limits: Union[List, np.ndarray]):
         import rtde_control
         from rtde_control import RTDEControlInterface as RTDEControl
         import rtde_receive
@@ -34,13 +34,11 @@ class URRobot(Robot):
         self._free_drive = False
         self.robot.endFreedriveMode()
         self._use_gripper = not no_gripper
-        # TODO: This should be in a configuration file.
-        self.x_limits = np.array([0.0, 0.7])
-        self.y_limits = np.array([-0.3, 0.5])
-        self.z_limits = np.array([0.05, 0.7])
+        self.x_limits = x_limits
+        self.y_limits = y_limits
+        self.z_limits = z_limits
         self.tcp_offset = self.robot.getTCPOffset()
-        # TODO: This joint configuration should be set in a config file.
-        self.robot.moveJ([0.0, -1.57, -1.57, -1.57, 1.57, 0.0])
+        self.robot.moveJ(start_position)
         self.outside_workspace_limits = False
 
     def num_dofs(self) -> int:
@@ -153,7 +151,7 @@ class URRobot(Robot):
 
 def main():
     robot_ip = "192.168.1.11"
-    ur = URRobot(robot_ip, no_gripper=True)
+    ur = URRobot(robot_ip, no_gripper=True, start_position=[0.0, -90.0, -90.0, -90.0, 90.0, 0.0], x_limits=[0.0, 0.5], y_limits=[-0.3, 0.5], z_limits=[0.05, 0.7])
     print(ur)
     ur.set_freedrive_mode(True)
     print(ur.get_observations())

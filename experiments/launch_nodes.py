@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import toml
 # import tyro
 
@@ -18,8 +19,10 @@ class Args:
 
 
 def launch_robot_server(config):
-    port = config["node_port"]
-    if config["type"] == "sim_ur":
+    robot_config = config["robot"]
+    env_config = config["env"]
+    port = robot_config["node_port"]
+    if robot_config["type"] == "sim_ur":
         MENAGERIE_ROOT: Path = (
             Path(__file__).parent.parent / "third_party" / "mujoco_menagerie"
         )
@@ -28,10 +31,10 @@ def launch_robot_server(config):
         from gello.robots.sim_robot import MujocoRobotServer
 
         server = MujocoRobotServer(
-            xml_path=xml, gripper_xml_path=gripper_xml, port=port, host=config["node_hostname"]
+            xml_path=xml, gripper_xml_path=gripper_xml, port=port, host=robot_config["node_hostname"]
         )
         server.serve()
-    elif config["type"] == "sim_panda":
+    elif robot_config["type"] == "sim_panda":
         from gello.robots.sim_robot import MujocoRobotServer
 
         MENAGERIE_ROOT: Path = (
@@ -40,10 +43,10 @@ def launch_robot_server(config):
         xml = MENAGERIE_ROOT / "franka_emika_panda" / "panda.xml"
         gripper_xml = None
         server = MujocoRobotServer(
-            xml_path=xml, gripper_xml_path=gripper_xml, port=port, host=config["node_hostname"]
+            xml_path=xml, gripper_xml_path=gripper_xml, port=port, host=robot_config["node_hostname"]
         )
         server.serve()
-    elif config["type"] == "sim_xarm":
+    elif robot_config["type"] == "sim_xarm":
         from gello.robots.sim_robot import MujocoRobotServer
 
         MENAGERIE_ROOT: Path = (
@@ -52,38 +55,38 @@ def launch_robot_server(config):
         xml = MENAGERIE_ROOT / "ufactory_xarm7" / "xarm7.xml"
         gripper_xml = None
         server = MujocoRobotServer(
-            xml_path=xml, gripper_xml_path=gripper_xml, port=port, host=config["node_hostname"]
+            xml_path=xml, gripper_xml_path=gripper_xml, port=port, host=robot_config["node_hostname"]
         )
         server.serve()
 
     else:
-        if config["type"] == "xarm":
+        if robot_config["type"] == "xarm":
             from gello.robots.xarm_robot import XArmRobot
 
-            robot = XArmRobot(ip=config["hostname"])
-        elif config["type"] == "ur":
+            robot = XArmRobot(ip=robot_config["hostname"])
+        elif robot_config["type"] == "ur":
             from gello.robots.ur import URRobot
 
-            robot = URRobot(robot_ip=config["hostname"], no_gripper=config["no_gripper"])
-        elif config["type"] == "panda":
+            robot = URRobot(robot_ip=robot_config["hostname"], no_gripper=robot_config["no_gripper"], start_position=np.deg2rad(env_config["start_joints_deg"]), x_limits=robot_config["x_limits_m"], y_limits=robot_config["y_limits_m"], z_limits=robot_config["z_limits_m"])
+        elif robot_config["type"] == "panda":
             from gello.robots.panda import PandaRobot
 
-            robot = PandaRobot(robot_ip=config["hostname"])
-        elif config["type"] == "bimanual_ur":
+            robot = PandaRobot(robot_ip=robot_config["hostname"])
+        elif robot_config["type"] == "bimanual_ur":
             from gello.robots.ur import URRobot
 
             # IP for the bimanual robot setup is hardcoded
-            _robot_l = URRobot(robot_ip="192.168.2.10")
-            _robot_r = URRobot(robot_ip="192.168.1.10")
+            _robot_l = URRobot(robot_ip="192.168.2.10", no_gripper=robot_config["no_gripper"], start_position=np.deg2rad(env_config["start_joints_deg"]), x_limits=robot_config["x_limits_m"], y_limits=robot_config["y_limits_m"], z_limits=robot_config["z_limits_m"])
+            _robot_r = URRobot(robot_ip="192.168.2.11", no_gripper=robot_config["no_gripper"], start_position=np.deg2rad(env_config["start_joints_deg"]), x_limits=robot_config["x_limits_m"], y_limits=robot_config["y_limits_m"], z_limits=robot_config["z_limits_m"])
             robot = BimanualRobot(_robot_l, _robot_r)
-        elif config["type"] == "none" or config["type"] == "print":
+        elif robot_config["type"] == "none" or robot_config["type"] == "print":
             robot = PrintRobot(8)
 
         else:
             raise NotImplementedError(
-                f"Robot {config['type']} not implemented, choose one of: sim_ur, xarm, ur, bimanual_ur, none"
+                f"Robot {robot_config['type']} not implemented, choose one of: sim_ur, xarm, ur, bimanual_ur, none"
             )
-        server = ZMQServerRobot(robot, port=port, host=config["node_hostname"])
+        server = ZMQServerRobot(robot, port=port, host=robot_config["node_hostname"])
         print(f"Starting robot server on port {port}")
         server.serve()
 
@@ -94,4 +97,4 @@ def main(config):
 
 if __name__ == "__main__":
     config = toml.load("./config.toml")
-    main(config["robot"])
+    main(config)
