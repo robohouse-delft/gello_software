@@ -1,0 +1,36 @@
+[env]
+agent = "gello"
+robot_port = 6001
+wrist_camera_port = 5000
+base_camera_port = 5001
+hostname = "127.0.0.1"
+freq_hz = 100
+joint_ids=[1, 2, 3, 4, 5, 6]
+start_joints_deg = [0.0, -90.0, -90.0, -90.0, 90.0, 0.0]
+joint_signs = [1.0, 1.0, -1.0, 1.0, 1.0, 1.0]
+joint_offsets=[3.142, 3.142, 4.712, 7.854, 3.142, -1.571]
+# Uncomment if you have a gripper attached to the robot -- note, this needs to correlate with teh `no_gripper` option below.
+# gripper_config=(7, 194, 152),
+mock = false
+use_save_interface = false
+data_dir = "~/bc_data"
+bimanual = false
+verbose = false
+
+[robot]
+type = "ur"
+hostname = "172.17.0.2"
+node_hostname = "127.0.0.1"
+node_port = 6001
+no_gripper = true
+
+[camera_server]
+hostname = "127.0.0.1"
+
+[camera_clients]
+ports = [5000, 5001]
+hostname = "127.0.0.1"
+
+[output]
+source_dir = "~/bc_data"
+vis = true

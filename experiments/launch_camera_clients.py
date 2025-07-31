@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from typing import Tuple
 
+import toml
 import numpy as np
-import tyro
+# import tyro
 
 from gello.zmq_core.camera_node import ZMQClientCamera
 
@@ -14,13 +15,13 @@ class Args:
     # hostname: str = "128.32.175.167"
 
 
-def main(args):
+def main(config):
     cameras = []
     import cv2
 
     images_display_names = []
-    for port in args.ports:
-        cameras.append(ZMQClientCamera(port=port, host=args.hostname))
+    for port in config["ports"]:
+        cameras.append(ZMQClientCamera(port=port, host=config["hostname"]))
         images_display_names.append(f"image_{port}")
         cv2.namedWindow(images_display_names[-1], cv2.WINDOW_NORMAL)
 
@@ -34,4 +35,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(tyro.cli(Args))
+    config = toml.load("./config.toml")
+    main(config["camera_clients"])

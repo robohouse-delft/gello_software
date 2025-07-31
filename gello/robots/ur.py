@@ -94,7 +94,8 @@ class URRobot(Robot):
                 print("Robot end-effector has been commanded to be outside of the workspace limits. Move leader arm back to within workspace.")
             self.outside_workspace_limits = True
             return None
-        else:
+        elif self.outside_workspace_limits:
+            print("Robot end-effector back inside the workspace")
             self.outside_workspace_limits = False
 
         t_start = self.robot.initPeriod()

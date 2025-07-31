@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from multiprocessing import Process
 
-import tyro
+import toml
+# import tyro
 
 from gello.cameras.realsense_camera import RealSenseCamera, get_device_ids
 from gello.zmq_core.camera_node import ZMQServerCamera
@@ -13,14 +14,14 @@ class Args:
     hostname: str = "128.32.175.167"
 
 
-def launch_server(port: int, camera_id: int, args: Args):
+def launch_server(port: int, camera_id: str, config):
     camera = RealSenseCamera(camera_id)
-    server = ZMQServerCamera(camera, port=port, host=args.hostname)
+    server = ZMQServerCamera(camera, port=port, host=config["hostname"])
     print(f"Starting camera server on port {port}")
     server.serve()
 
 
-def main(args):
+def main(config):
     ids = get_device_ids()
     camera_port = 5000
     camera_servers = []
@@ -28,7 +29,7 @@ def main(args):
         # start a python process for each camera
         print(f"Launching camera {camera_id} on port {camera_port}")
         camera_servers.append(
-            Process(target=launch_server, args=(camera_port, camera_id, args))
+            Process(target=launch_server, args=(camera_port, camera_id, config))
         )
         camera_port += 1
 
@@ -37,4 +38,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(tyro.cli(Args))
+    config = toml.load("./config.toml")
+    main(config["camera_server"])

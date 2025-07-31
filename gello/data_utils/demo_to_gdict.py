@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import numpy as np
-import tyro
+import toml
+# import tyro
 from natsort import natsorted
 from tqdm import tqdm
 
@@ -200,10 +201,10 @@ class Args:
     vis: bool = True
 
 
-def main(args):
-    subdirs = natsorted(glob.glob(os.path.join(args.source_dir, "*/"), recursive=True))
+def main(config):
+    subdirs = natsorted(glob.glob(os.path.join(config["source_dir"], "*/"), recursive=True))
 
-    output_dir = args.source_dir
+    output_dir = config["source_dir"]
     if output_dir[-1] == "/":
         output_dir = output_dir[:-1]
 
@@ -323,7 +324,7 @@ def main(args):
         f"Finished converting all demos to {output_dir}! (num demos: {tot} / {len(subdirs)})"
     )
 
-    if args.vis:
+    if config["vis"]:
         if len(all_rgbs) > 0:
             print(f"Visualizing all demos...")
 
@@ -342,4 +343,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(tyro.cli(Args))
+    config = toml.load("./config.toml")
+    main(config["output"])

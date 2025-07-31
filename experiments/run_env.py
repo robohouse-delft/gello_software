@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import numpy as np
-import tyro
+import toml
+# import tyro
 
 from gello.agents.agent import BimanualAgent, DummyAgent
 from gello.agents.gello_agent import GelloAgent
@@ -43,8 +44,10 @@ class Args:
     verbose: bool = False
 
 
-def main(args):
-    if args.mock:
+def main(config):
+    env_config = config["env"]
+    robot_config = config["robot"]
+    if env_config["mock"]:
         robot_client = PrintRobot(8, dont_print=True)
         camera_clients = {}
     else:
@@ -53,54 +56,54 @@ def main(args):
             # "wrist": ZMQClientCamera(port=args.wrist_camera_port, host=args.hostname),
             # "base": ZMQClientCamera(port=args.base_camera_port, host=args.hostname),
         }
-        robot_client = ZMQClientRobot(port=args.robot_port, host=args.hostname)
-    env = RobotEnv(robot_client, control_rate_hz=args.hz, camera_dict=camera_clients)
+        robot_client = ZMQClientRobot(port=env_config["robot_port"], host=env_config["hostname"])
+    env = RobotEnv(robot_client, control_rate_hz=env_config["freq_hz"], camera_dict=camera_clients)
 
-    if args.bimanual:
-        if args.agent == "gello":
+    if env_config["bimanual"]:
+        if env_config["agent"] == "gello":
             # dynamixel control box port map (to distinguish left and right gello)
             right = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT7WBG6A-if00-port0"
             left = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT7WBEIA-if00-port0"
             left_agent = GelloAgent(port=left)
             right_agent = GelloAgent(port=right)
             agent = BimanualAgent(left_agent, right_agent)
-        elif args.agent == "quest":
+        elif env_config["agent"] == "quest":
             from gello.agents.quest_agent import SingleArmQuestAgent
 
-            left_agent = SingleArmQuestAgent(robot_type=args.robot_type, which_hand="l")
+            left_agent = SingleArmQuestAgent(robot_type=env_config["robot_type"], which_hand="l")
             right_agent = SingleArmQuestAgent(
-                robot_type=args.robot_type, which_hand="r"
+                robot_type=env_config["robot_type"], which_hand="r"
             )
             agent = BimanualAgent(left_agent, right_agent)
             # raise NotImplementedError
-        elif args.agent == "spacemouse":
+        elif env_config["agent"] == "spacemouse":
             from gello.agents.spacemouse_agent import SpacemouseAgent
 
             left_path = "/dev/hidraw0"
             right_path = "/dev/hidraw1"
             left_agent = SpacemouseAgent(
-                robot_type=args.robot_type, device_path=left_path, verbose=args.verbose
+                robot_type=env_config["robot_type"], device_path=left_path, verbose=env_config["verbose"]
             )
             right_agent = SpacemouseAgent(
-                robot_type=args.robot_type,
+                robot_type=env_config["robot_type"],
                 device_path=right_path,
-                verbose=args.verbose,
+                verbose=env_config["verbose"],
                 invert_button=True,
             )
             agent = BimanualAgent(left_agent, right_agent)
         else:
-            raise ValueError(f"Invalid agent name for bimanual: {args.agent}")
+            raise ValueError(f"Invalid agent name for bimanual: {env_config['agent']}")
 
         # System setup specific. This reset configuration works well on our setup. If you are mounting the robot
         # differently, you need a separate reset joint configuration.
         reset_joints_left = (
             np.deg2rad([0, -90, -90, -90, 90, 0, 0])
-            if not args.no_gripper
+            if not robot_config["no_gripper"]
             else np.deg2rad([0, -90, -90, -90, 90, 0])
         )
         reset_joints_right = (
             np.deg2rad([0, -90, 90, -90, -90, 0, 0])
-            if not args.no_gripper
+            if not robot_config["no_gripper"]
             else np.deg2rad([0, -90, -90, -90, 90, 0])
         )
         reset_joints = np.concatenate([reset_joints_left, reset_joints_right])
@@ -111,27 +114,26 @@ def main(args):
         for jnt in np.linspace(curr_joints, reset_joints, steps):
             env.step(jnt)
     else:
-        if args.agent == "gello":
-            gello_port = args.gello_port
-            if gello_port is None:
-                usb_ports = glob.glob("/dev/serial/by-id/*")
-                print(f"Found {len(usb_ports)} ports")
-                if len(usb_ports) > 0:
-                    gello_port = usb_ports[0]
-                    print(f"using port {gello_port}")
-                else:
-                    raise ValueError(
-                        "No gello port found, please specify one or plug in gello"
-                    )
-            if args.start_joints is None:
+        if env_config["agent"] == "gello":
+            gello_port = None
+            usb_ports = glob.glob("/dev/serial/by-id/*")
+            print(f"Found {len(usb_ports)} ports")
+            if len(usb_ports) > 0:
+                gello_port = usb_ports[0]
+                print(f"using port {gello_port}")
+            else:
+                raise ValueError(
+                    "No gello port found, please specify one or plug in gello"
+                )
+            if env_config["start_joints_deg"] is None:
                 reset_joints = np.deg2rad(
                     [0, -90, 90, -90, -90, 0, 0]
                 )  # Change this to your own reset joints
-                if args.no_gripper:
+                if robot_config["no_gripper"]:
                     reset_joints = reset_joints[:-1]
             else:
-                reset_joints = np.asarray(args.start_joints)
-            agent = GelloAgent(port=gello_port, start_joints=args.start_joints)
+                reset_joints = np.asarray(np.deg2rad(env_config["start_joints_deg"]))
+            agent = GelloAgent(port=gello_port, start_joints=np.deg2rad(env_config["start_joints_deg"]) if env_config["start_joints_deg"] is not None else None)
             curr_joints = env.get_obs()["joint_positions"]
             if reset_joints.shape == curr_joints.shape:
                 max_delta = (np.abs(curr_joints - reset_joints)).max()
@@ -140,17 +142,17 @@ def main(args):
                 for jnt in np.linspace(curr_joints, reset_joints, steps):
                     env.step(jnt)
                     time.sleep(0.001)
-        elif args.agent == "quest":
+        elif env_config["agent"] == "quest":
             from gello.agents.quest_agent import SingleArmQuestAgent
 
-            agent = SingleArmQuestAgent(robot_type=args.robot_type, which_hand="l")
-        elif args.agent == "spacemouse":
+            agent = SingleArmQuestAgent(robot_type=env_config["robot_type"], which_hand="l")
+        elif env_config["agent"] == "spacemouse":
             from gello.agents.spacemouse_agent import SpacemouseAgent
 
-            agent = SpacemouseAgent(robot_type=args.robot_type, verbose=args.verbose)
-        elif args.agent == "dummy" or args.agent == "none":
+            agent = SpacemouseAgent(robot_type=env_config["robot_type"], verbose=env_config["verbose"])
+        elif env_config["agent"] == "dummy" or env_config["agent"] == "none":
             agent = DummyAgent(num_dofs=robot_client.num_dofs())
-        elif args.agent == "policy":
+        elif env_config["agent"] == "policy":
             raise NotImplementedError("add your imitation policy here if there is one")
         else:
             raise ValueError("Invalid agent name")
@@ -210,7 +212,7 @@ def main(args):
             )
         exit()
 
-    if args.use_save_interface:
+    if env_config["use_save_interface"]:
         from gello.data_utils.keyboard_interface import KBReset
 
         kb_interface = KBReset()
@@ -231,13 +233,13 @@ def main(args):
         )
         action = agent.act(obs)
         dt = datetime.datetime.now()
-        if args.use_save_interface:
+        if env_config["use_save_interface"]:
             state = kb_interface.update()
             if state == "start":
                 dt_time = datetime.datetime.now()
                 save_path = (
-                    Path(args.data_dir).expanduser()
-                    / args.agent
+                    Path(env_config["data_dir"]).expanduser()
+                    / env_config["agent"]
                     / dt_time.strftime("%m%d_%H%M%S")
                 )
                 save_path.mkdir(parents=True, exist_ok=True)
@@ -253,4 +255,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(tyro.cli(Args))
+    config = toml.load("./config.toml")
+    main(config)

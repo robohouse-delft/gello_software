@@ -3,7 +3,9 @@ from pathlib import Path
 from typing import Tuple
 
 import numpy as np
-import tyro
+import toml
+# import tyro
+import glob
 import sys 
 import os
 
@@ -45,18 +47,34 @@ class Args:
         return self.num_robot_joints + extra_joints
 
 
-def get_config(args: Args) -> None:
-    joint_ids = list(range(1, args.num_joints + 1))
-    driver = DynamixelDriver(joint_ids, port=args.port, baudrate=57600)
+def get_config(config) -> None:
+    env_config = config["env"]
+    robot_config = config["robot"]
+    usb_ports = glob.glob("/dev/serial/by-id/*")
+    print(f"Found {len(usb_ports)} ports")
+    port = None
+    if len(usb_ports) > 0:
+        port = usb_ports[0]
+        print(f"using port {port}")
+    else:
+        raise ValueError(
+            "No gello port found, please specify one or plug in gello"
+        )
+
+    start_joints = np.deg2rad(env_config["start_joints_deg"])
+    num_robot_joints = len(start_joints)
+    num_joints = num_robot_joints if robot_config["no_gripper"] else num_robot_joints + 1
+    joint_ids = list(range(1, num_joints + 1))
+    driver = DynamixelDriver(joint_ids, port=port, baudrate=57600)
 
     # assume that the joint state shouold be args.start_joints
     # find the offset, which is a multiple of np.pi/2 that minimizes the error between the current joint state and args.start_joints
     # this is done by brute force, we seach in a range of +/- 8pi
 
     def get_error(offset: float, index: int, joint_state: np.ndarray) -> float:
-        joint_sign_i = args.joint_signs[index]
+        joint_sign_i = env_config["joint_signs"][index]
         joint_i = joint_sign_i * (joint_state[index] - offset)
-        start_i = args.start_joints[index]
+        start_i = start_joints[index]
         return np.abs(joint_i - start_i)
 
     for _ in range(10):
@@ -65,7 +83,7 @@ def get_config(args: Args) -> None:
     for _ in range(1):
         best_offsets = []
         curr_joints = driver.get_joints()
-        for i in range(args.num_robot_joints):
+        for i in range(num_robot_joints):
             best_offset = 0
             best_error = 1e6
             for offset in np.linspace(
@@ -83,7 +101,7 @@ def get_config(args: Args) -> None:
             + ", ".join([f"{int(np.round(x/(np.pi/2)))}*np.pi/2" for x in best_offsets])
             + " ]",
         )
-        if args.gripper:
+        if not robot_config["no_gripper"]:
             print(
                 "gripper open (degrees)       ",
                 np.rad2deg(driver.get_joints()[-1]) - 0.2,
@@ -94,9 +112,10 @@ def get_config(args: Args) -> None:
             )
 
 
-def main(args: Args) -> None:
-    get_config(args)
+def main(config) -> None:
+    get_config(config)
 
 
 if __name__ == "__main__":
-    main(tyro.cli(Args))
+    config = toml.load("./config.toml")
+    main(config)
