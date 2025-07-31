@@ -80,6 +80,7 @@ class DynamixelRobot(Robot):
 
         if start_joints is not None:
             # loop through all joints and add +- 2pi to the joint offsets to get the closest to start joints
+            start_joints = np.asarray(start_joints)
             new_joint_offsets = []
             current_joints = self.get_joint_state()
             assert current_joints.shape == start_joints.shape

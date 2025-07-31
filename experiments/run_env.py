@@ -130,7 +130,7 @@ def main(args):
                 if args.no_gripper:
                     reset_joints = reset_joints[:-1]
             else:
-                reset_joints = args.start_joints
+                reset_joints = np.asarray(args.start_joints)
             agent = GelloAgent(port=gello_port, start_joints=args.start_joints)
             curr_joints = env.get_obs()["joint_positions"]
             if reset_joints.shape == curr_joints.shape:
