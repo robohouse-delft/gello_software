@@ -10,11 +10,12 @@ class URRobot(Robot):
 
     def __init__(self, robot_ip: str = "192.168.1.10", no_gripper: bool = False):
         import rtde_control
+        from rtde_control import RTDEControlInterface as RTDEControl
         import rtde_receive
 
         [print("in ur robot") for _ in range(4)]
         try:
-            self.robot = rtde_control.RTDEControlInterface(robot_ip)
+            self.robot = rtde_control.RTDEControlInterface(robot_ip, 500.0, RTDEControl.FLAG_USE_EXT_UR_CAP)
         except Exception as e:
             print(e)
             print(robot_ip)
@@ -33,6 +34,14 @@ class URRobot(Robot):
         self._free_drive = False
         self.robot.endFreedriveMode()
         self._use_gripper = not no_gripper
+        # TODO: This should be in a configuration file.
+        self.x_limits = np.array([0.0, 0.7])
+        self.y_limits = np.array([-0.3, 0.5])
+        self.z_limits = np.array([0.05, 0.7])
+        self.tcp_offset = self.robot.getTCPOffset()
+        # TODO: This joint configuration should be set in a config file.
+        self.robot.moveJ([0.0, -1.57, -1.57, -1.57, 1.57, 0.0])
+        self.outside_workspace_limits = False
 
     def num_dofs(self) -> int:
         """Get the number of joints of the robot.
@@ -79,6 +88,15 @@ class URRobot(Robot):
         gain = 100
 
         robot_joints = joint_state[:6]
+        # Check limits end-effector workspace limits before commanding the robot
+        if not self._is_within_limits(robot_joints):
+            if not self.outside_workspace_limits:
+                print("Robot end-effector has been commanded to be outside of the workspace limits. Move leader arm back to within workspace.")
+            self.outside_workspace_limits = True
+            return None
+        else:
+            self.outside_workspace_limits = False
+
         t_start = self.robot.initPeriod()
         self.robot.servoJ(
             robot_joints, velocity, acceleration, dt, lookahead_time, gain
@@ -119,6 +137,17 @@ class URRobot(Robot):
             "ee_pos_quat": pos_quat,
             "gripper_position": gripper_pos,
         }
+    
+    def _is_within_limits(self, q_vec: np.ndarray) -> bool:
+        within_limits = True
+        pose = self.robot.getForwardKinematics(q_vec, self.tcp_offset)
+        if pose[0] < self.x_limits[0] or pose[0] > self.x_limits[1]:
+            within_limits = False
+        elif pose[1] < self.y_limits[0] or pose[1] > self.y_limits[1]:
+            within_limits = False
+        elif pose[2] < self.z_limits[0] or pose[2] > self.z_limits[1]:
+            within_limits = False
+        return within_limits
 
 
 def main():
