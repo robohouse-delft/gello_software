@@ -67,7 +67,7 @@ def launch_robot_server(config):
         elif robot_config["type"] == "ur":
             from gello.robots.ur import URRobot
 
-            robot = URRobot(robot_ip=robot_config["hostname"], no_gripper=robot_config["no_gripper"], start_position=np.deg2rad(env_config["start_joints_deg"]), x_limits=robot_config["x_limits_m"], y_limits=robot_config["y_limits_m"], z_limits=robot_config["z_limits_m"])
+            robot = URRobot(robot_ip=robot_config["hostname"], gripper=robot_config["gripper"], start_position=np.deg2rad(env_config["start_joints_deg"]), x_limits=robot_config["x_limits_m"], y_limits=robot_config["y_limits_m"], z_limits=robot_config["z_limits_m"])
         elif robot_config["type"] == "panda":
             from gello.robots.panda import PandaRobot
 
@@ -76,8 +76,8 @@ def launch_robot_server(config):
             from gello.robots.ur import URRobot
 
             # IP for the bimanual robot setup is hardcoded
-            _robot_l = URRobot(robot_ip="192.168.2.10", no_gripper=robot_config["no_gripper"], start_position=np.deg2rad(env_config["start_joints_deg"]), x_limits=robot_config["x_limits_m"], y_limits=robot_config["y_limits_m"], z_limits=robot_config["z_limits_m"])
-            _robot_r = URRobot(robot_ip="192.168.2.11", no_gripper=robot_config["no_gripper"], start_position=np.deg2rad(env_config["start_joints_deg"]), x_limits=robot_config["x_limits_m"], y_limits=robot_config["y_limits_m"], z_limits=robot_config["z_limits_m"])
+            _robot_l = URRobot(robot_ip="192.168.2.10", gripper=robot_config["gripper"], start_position=np.deg2rad(env_config["start_joints_deg"]), x_limits=robot_config["x_limits_m"], y_limits=robot_config["y_limits_m"], z_limits=robot_config["z_limits_m"])
+            _robot_r = URRobot(robot_ip="192.168.2.11", gripper=robot_config["gripper"], start_position=np.deg2rad(env_config["start_joints_deg"]), x_limits=robot_config["x_limits_m"], y_limits=robot_config["y_limits_m"], z_limits=robot_config["z_limits_m"])
             robot = BimanualRobot(_robot_l, _robot_r)
         elif robot_config["type"] == "none" or robot_config["type"] == "print":
             robot = PrintRobot(8)

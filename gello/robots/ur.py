@@ -4,11 +4,10 @@ import numpy as np
 
 from gello.robots.robot import Robot
 
-
 class URRobot(Robot):
     """A class representing a UR robot."""
 
-    def __init__(self, robot_ip: str, no_gripper: bool, start_position: Union[List, np.ndarray], x_limits: Union[List, np.ndarray], y_limits: Union[List, np.ndarray], z_limits: Union[List, np.ndarray]):
+    def __init__(self, robot_ip: str, gripper: str, start_position: Union[List, np.ndarray], x_limits: Union[List, np.ndarray], y_limits: Union[List, np.ndarray], z_limits: Union[List, np.ndarray]):
         import rtde_control
         from rtde_control import RTDEControlInterface as RTDEControl
         import rtde_receive
@@ -21,19 +20,29 @@ class URRobot(Robot):
             print(robot_ip)
 
         self.r_inter = rtde_receive.RTDEReceiveInterface(robot_ip)
-        if not no_gripper:
+
+        self._use_gripper = True
+        if gripper == "none":
+            self._use_gripper = False
+        elif gripper == "robotiq":
             from gello.robots.robotiq_gripper import RobotiqGripper
 
             self.gripper = RobotiqGripper()
             self.gripper.connect(hostname=robot_ip, port=63352)
-            print("gripper connected")
-            # gripper.activate()
+            print("Robotiq gripper connected")
+        elif gripper == "shadowtac":
+            from gello.robots.shadowtac_gripper import ShadowtacGripper
+
+            self.gripper = ShadowtacGripper()
+            self.gripper.connect(port="/dev/ttyACM0", baud_rate=115200)
+            print("Shadowtac gripper connected")
+        else:
+            raise ValueError("Invalid gripper type specified")
 
         [print("connect") for _ in range(4)]
 
         self._free_drive = False
         self.robot.endFreedriveMode()
-        self._use_gripper = not no_gripper
         self.x_limits = x_limits
         self.y_limits = y_limits
         self.z_limits = z_limits
@@ -151,7 +160,7 @@ class URRobot(Robot):
 
 def main():
     robot_ip = "192.168.1.11"
-    ur = URRobot(robot_ip, no_gripper=True, start_position=[0.0, -90.0, -90.0, -90.0, 90.0, 0.0], x_limits=[0.0, 0.5], y_limits=[-0.3, 0.5], z_limits=[0.05, 0.7])
+    ur = URRobot(robot_ip, gripper="none", start_position=[0.0, -90.0, -90.0, -90.0, 90.0, 0.0], x_limits=[0.0, 0.5], y_limits=[-0.3, 0.5], z_limits=[0.05, 0.7])
     print(ur)
     ur.set_freedrive_mode(True)
     print(ur.get_observations())

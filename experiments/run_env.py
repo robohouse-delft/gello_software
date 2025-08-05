@@ -98,12 +98,12 @@ def main(config):
         # differently, you need a separate reset joint configuration.
         reset_joints_left = (
             np.deg2rad([0, -90, -90, -90, 90, 0, 0])
-            if not robot_config["no_gripper"]
+            if robot_config["gripper"] != "none"
             else np.deg2rad([0, -90, -90, -90, 90, 0])
         )
         reset_joints_right = (
             np.deg2rad([0, -90, 90, -90, -90, 0, 0])
-            if not robot_config["no_gripper"]
+            if robot_config["gripper"] != "none"
             else np.deg2rad([0, -90, -90, -90, 90, 0])
         )
         reset_joints = np.concatenate([reset_joints_left, reset_joints_right])
@@ -129,7 +129,7 @@ def main(config):
                 reset_joints = np.deg2rad(
                     [0, -90, 90, -90, -90, 0, 0]
                 )  # Change this to your own reset joints
-                if robot_config["no_gripper"]:
+                if robot_config["gripper"] == "none":
                     reset_joints = reset_joints[:-1]
             else:
                 reset_joints = np.asarray(np.deg2rad(env_config["start_joints_deg"]))

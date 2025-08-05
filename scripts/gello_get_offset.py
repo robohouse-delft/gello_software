@@ -63,7 +63,7 @@ def get_config(config) -> None:
 
     start_joints = np.deg2rad(env_config["start_joints_deg"])
     num_robot_joints = len(start_joints)
-    num_joints = num_robot_joints if robot_config["no_gripper"] else num_robot_joints + 1
+    num_joints = num_robot_joints if robot_config["gripper"] == "none" else num_robot_joints + 1
     joint_ids = list(range(1, num_joints + 1))
     driver = DynamixelDriver(joint_ids, port=port, baudrate=57600)
 
@@ -101,7 +101,7 @@ def get_config(config) -> None:
             + ", ".join([f"{int(np.round(x/(np.pi/2)))}*np.pi/2" for x in best_offsets])
             + " ]",
         )
-        if not robot_config["no_gripper"]:
+        if robot_config["gripper"] != "none":
             print(
                 "gripper open (degrees)       ",
                 np.rad2deg(driver.get_joints()[-1]) - 0.2,
