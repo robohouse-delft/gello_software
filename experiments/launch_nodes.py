@@ -31,7 +31,10 @@ def launch_robot_server(config):
         from gello.robots.sim_robot import MujocoRobotServer
 
         server = MujocoRobotServer(
-            xml_path=xml, gripper_xml_path=gripper_xml, port=port, host=robot_config["node_hostname"]
+            xml_path=xml,
+            gripper_xml_path=gripper_xml,
+            port=port,
+            host=robot_config["node_hostname"],
         )
         server.serve()
     elif robot_config["type"] == "sim_panda":
@@ -43,7 +46,10 @@ def launch_robot_server(config):
         xml = MENAGERIE_ROOT / "franka_emika_panda" / "panda.xml"
         gripper_xml = None
         server = MujocoRobotServer(
-            xml_path=xml, gripper_xml_path=gripper_xml, port=port, host=robot_config["node_hostname"]
+            xml_path=xml,
+            gripper_xml_path=gripper_xml,
+            port=port,
+            host=robot_config["node_hostname"],
         )
         server.serve()
     elif robot_config["type"] == "sim_xarm":
@@ -55,7 +61,10 @@ def launch_robot_server(config):
         xml = MENAGERIE_ROOT / "ufactory_xarm7" / "xarm7.xml"
         gripper_xml = None
         server = MujocoRobotServer(
-            xml_path=xml, gripper_xml_path=gripper_xml, port=port, host=robot_config["node_hostname"]
+            xml_path=xml,
+            gripper_xml_path=gripper_xml,
+            port=port,
+            host=robot_config["node_hostname"],
         )
         server.serve()
 
@@ -67,7 +76,16 @@ def launch_robot_server(config):
         elif robot_config["type"] == "ur":
             from gello.robots.ur import URRobot
 
-            robot = URRobot(robot_ip=robot_config["hostname"], gripper=robot_config["gripper"], start_position=np.deg2rad(env_config["start_joints_deg"]), x_limits=robot_config["x_limits_m"], y_limits=robot_config["y_limits_m"], z_limits=robot_config["z_limits_m"])
+            robot = URRobot(
+                robot_ip=robot_config["hostname"],
+                gripper=robot_config["gripper"],
+                gripper_hostname=robot_config["gripper_hostname"],
+                gripper_port=robot_config["gripper_port"],
+                start_position=np.deg2rad(env_config["start_joints_deg"]),
+                x_limits=robot_config["x_limits_m"],
+                y_limits=robot_config["y_limits_m"],
+                z_limits=robot_config["z_limits_m"],
+            )
         elif robot_config["type"] == "panda":
             from gello.robots.panda import PandaRobot
 
@@ -76,8 +94,26 @@ def launch_robot_server(config):
             from gello.robots.ur import URRobot
 
             # IP for the bimanual robot setup is hardcoded
-            _robot_l = URRobot(robot_ip="192.168.2.10", gripper=robot_config["gripper"], start_position=np.deg2rad(env_config["start_joints_deg"]), x_limits=robot_config["x_limits_m"], y_limits=robot_config["y_limits_m"], z_limits=robot_config["z_limits_m"])
-            _robot_r = URRobot(robot_ip="192.168.2.11", gripper=robot_config["gripper"], start_position=np.deg2rad(env_config["start_joints_deg"]), x_limits=robot_config["x_limits_m"], y_limits=robot_config["y_limits_m"], z_limits=robot_config["z_limits_m"])
+            _robot_l = URRobot(
+                robot_ip="192.168.2.10",
+                gripper=robot_config["gripper"],
+                gripper_hostname=robot_config["gripper_hostname"],
+                gripper_port=robot_config["gripper_port"],
+                start_position=np.deg2rad(env_config["start_joints_deg"]),
+                x_limits=robot_config["x_limits_m"],
+                y_limits=robot_config["y_limits_m"],
+                z_limits=robot_config["z_limits_m"],
+            )
+            _robot_r = URRobot(
+                robot_ip="192.168.2.11",
+                gripper=robot_config["gripper"],
+                gripper_hostname=robot_config["gripper_hostname"],
+                gripper_port=robot_config["gripper_port"],
+                start_position=np.deg2rad(env_config["start_joints_deg"]),
+                x_limits=robot_config["x_limits_m"],
+                y_limits=robot_config["y_limits_m"],
+                z_limits=robot_config["z_limits_m"],
+            )
             robot = BimanualRobot(_robot_l, _robot_r)
         elif robot_config["type"] == "none" or robot_config["type"] == "print":
             robot = PrintRobot(8)

@@ -4,17 +4,30 @@ import numpy as np
 
 from gello.robots.robot import Robot
 
+
 class URRobot(Robot):
     """A class representing a UR robot."""
 
-    def __init__(self, robot_ip: str, gripper: str, start_position: Union[List, np.ndarray], x_limits: Union[List, np.ndarray], y_limits: Union[List, np.ndarray], z_limits: Union[List, np.ndarray]):
+    def __init__(
+        self,
+        robot_ip: str,
+        gripper: str,
+        gripper_hostname: str,
+        gripper_port: int,
+        start_position: Union[List, np.ndarray],
+        x_limits: Union[List, np.ndarray],
+        y_limits: Union[List, np.ndarray],
+        z_limits: Union[List, np.ndarray],
+    ):
         import rtde_control
         from rtde_control import RTDEControlInterface as RTDEControl
         import rtde_receive
 
         [print("in ur robot") for _ in range(4)]
         try:
-            self.robot = rtde_control.RTDEControlInterface(robot_ip, 500.0, RTDEControl.FLAG_USE_EXT_UR_CAP)
+            self.robot = rtde_control.RTDEControlInterface(
+                robot_ip, 500.0, RTDEControl.FLAG_USE_EXT_UR_CAP
+            )
         except Exception as e:
             print(e)
             print(robot_ip)
@@ -28,14 +41,14 @@ class URRobot(Robot):
             from gello.robots.robotiq_gripper import RobotiqGripper
 
             self.gripper = RobotiqGripper()
-            self.gripper.connect(hostname=robot_ip, port=63352)
-            print("Robotiq gripper connected")
+            self.gripper.connect(hostname=gripper_hostname, port=gripper_port)
+            print(f"Robotiq gripper ({gripper_hostname}:{gripper_port}) connected")
         elif gripper == "shadowtac":
             from gello.robots.shadowtac_gripper import ShadowtacGripper
 
             self.gripper = ShadowtacGripper()
-            self.gripper.connect(port="/dev/ttyACM0", baud_rate=115200)
-            print("Shadowtac gripper connected")
+            self.gripper.connect(port=gripper_hostname, baud_rate=gripper_port)
+            print(f"Shadowtac gripper ({gripper_hostname}:{gripper_port}) connected")
         else:
             raise ValueError("Invalid gripper type specified")
 
@@ -98,7 +111,9 @@ class URRobot(Robot):
         # Check limits end-effector workspace limits before commanding the robot
         if not self._is_within_limits(robot_joints):
             if not self.outside_workspace_limits:
-                print("Robot end-effector has been commanded to be outside of the workspace limits. Move leader arm back to within workspace.")
+                print(
+                    "Robot end-effector has been commanded to be outside of the workspace limits. Move leader arm back to within workspace."
+                )
             self.outside_workspace_limits = True
             return None
         elif self.outside_workspace_limits:
@@ -145,7 +160,7 @@ class URRobot(Robot):
             "ee_pos_quat": pos_quat,
             "gripper_position": gripper_pos,
         }
-    
+
     def _is_within_limits(self, q_vec: np.ndarray) -> bool:
         within_limits = True
         pose = self.robot.getForwardKinematics(q_vec, self.tcp_offset)
@@ -160,7 +175,18 @@ class URRobot(Robot):
 
 def main():
     robot_ip = "192.168.1.11"
-    ur = URRobot(robot_ip, gripper="none", start_position=[0.0, -90.0, -90.0, -90.0, 90.0, 0.0], x_limits=[0.0, 0.5], y_limits=[-0.3, 0.5], z_limits=[0.05, 0.7])
+    gripper_hostname = "192.168.0.4"
+    gripper_port = 63352
+    ur = URRobot(
+        robot_ip,
+        "none",
+        gripper_hostname,
+        gripper_port,
+        start_position=[0.0, -90.0, -90.0, -90.0, 90.0, 0.0],
+        x_limits=[0.0, 0.5],
+        y_limits=[-0.3, 0.5],
+        z_limits=[0.05, 0.7],
+    )
     print(ur)
     ur.set_freedrive_mode(True)
     print(ur.get_observations())
