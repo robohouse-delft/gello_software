@@ -8,9 +8,9 @@ freq_hz = 100
 joint_ids=[1, 2, 3, 4, 5, 6]
 start_joints_deg = [0.0, -90.0, -90.0, -90.0, 90.0, 0.0]
 joint_signs = [1.0, 1.0, -1.0, 1.0, 1.0, 1.0]
-joint_offsets=[3.142, 3.142, 4.712, 7.854, 3.142, -1.571]
-# Uncomment if you have a gripper attached to the robot -- note, this needs to correlate with teh `gripper` option below.
-# gripper_config=(7, 194, 152),
+# joint_offsets=[3.142, 3.142, 4.712, 7.854, 3.142, -1.571]
+joint_offsets = [6.283, 3.142, 4.712, 1.571, 3.142, 6.283]
+gripper_config=[7, 194, 152]
 mock = false
 use_save_interface = false
 data_dir = "~/bc_data"
@@ -19,15 +19,15 @@ verbose = false
 
 [robot]
 type = "ur"
-hostname = "172.17.0.2"
+hostname = "192.168.0.3"
 node_hostname = "127.0.0.1"
 node_port = 6001
-gripper = "none" # none, robotiq, shadowtac
+gripper = "shadowtac" # none, robotiq, shadowtac
 gripper_hostname = "/dev/ttyACM0" # Either hostname/ip address/serial port, depending on the gripper comms protocol.
 gripper_port = 115200 # Either port number of baud rate
-x_limits_m = [0.0, 0.5]
-y_limits_m = [-0.3, 0.5]
-z_limits_m = [0.05, 0.7]
+x_limits_m = [-1.0, 1.0]
+y_limits_m = [-0.4, 0.6]
+z_limits_m = [0.05, 1.5]
 
 [camera_server]
 hostname = "127.0.0.1"

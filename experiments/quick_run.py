@@ -105,7 +105,14 @@ def main(args: Args):
                 raise ValueError(
                     "No gello port found, please specify one or plug in gello"
                 )
-        agent = GelloAgent(port=gello_port)
+        agent = GelloAgent(
+                port=gello_port,
+                joint_ids=[],
+                joint_signs=[],
+                joint_offsets=[],
+                gripper_config= None,
+                start_joints=None
+        )
 
         reset_joints = np.array([0, 0, 0, -np.pi, 0, np.pi, 0, 0])
         curr_joints = env.get_obs()["joint_positions"]

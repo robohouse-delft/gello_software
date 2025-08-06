@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass
-from typing import Dict, Optional, Sequence, Tuple
+from typing import Dict, Optional, Sequence, Tuple, List
 
 import numpy as np
 
@@ -103,21 +103,16 @@ PORT_CONFIG_MAP: Dict[str, DynamixelRobotConfig] = {
         joint_signs=(1, 1, -1, 1, 1, 1),
         gripper_config=(7, 286, 248),
     ),
-    "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTAA07JL-if00-port0": DynamixelRobotConfig(
-        joint_ids=(1, 2, 3, 4, 5, 6),
-        joint_offsets=(
-            2*np.pi/2,
-            2*np.pi/2,
-            3*np.pi/2,
-            5*np.pi/2,
-            2*np.pi/2,
-            -1*np.pi/2
-        ),
-        joint_signs=(1, 1, -1, 1, 1, 1),
-        # TODO: Uncomment when we have a gripper!
-        # gripper_config=(7, 194, 152),
-        gripper_config=None,
-    ),
+    # "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTAA07JL-if00-port0": DynamixelRobotConfig(
+    #     joint_ids=(1, 2, 3, 4, 5, 6),
+    #     joint_offsets=(
+    #         4*np.pi/2, 2*np.pi/2, 3*np.pi/2, 1*np.pi/2, 2*np.pi/2, 4*np.pi/2
+    #     ),
+    #     joint_signs=(1, 1, -1, 1, 1, 1),
+    #     # TODO: Uncomment when we have a gripper!
+    #     # gripper_config=(7, 194, 152),
+    #     gripper_config=None,
+    # ),
 }
 
 
@@ -125,19 +120,21 @@ class GelloAgent(Agent):
     def __init__(
         self,
         port: str,
-        dynamixel_config: Optional[DynamixelRobotConfig] = None,
+        joint_ids: List[int],
+        joint_signs: List[int],
+        joint_offsets: List[int],
+        gripper_config: Optional[Tuple[int, int, int]] = None,
         start_joints: Optional[np.ndarray] = None,
-    ):
-        if dynamixel_config is not None:
-            self._robot = dynamixel_config.make_robot(
-                port=port, start_joints=start_joints
-            )
-        else:
-            assert os.path.exists(port), port
-            assert port in PORT_CONFIG_MAP, f"Port {port} not in config map"
-
-            config = PORT_CONFIG_MAP[port]
-            self._robot = config.make_robot(port=port, start_joints=start_joints)
+    ): 
+        self._robot = DynamixelRobot(
+            joint_ids=joint_ids,
+            joint_offsets=joint_offsets,
+            real=True,
+            joint_signs=joint_signs,
+            port=port,
+            gripper_config=gripper_config,
+            start_joints=start_joints,
+        )
 
     def act(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
         return self._robot.get_joint_state()

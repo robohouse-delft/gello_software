@@ -140,11 +140,12 @@ class ShadowtacGripper:
 
         success = False
         if self.command_interface is not None:
-            if clip_pos == self._min_position:
+            # Add 50 points for hysterisis to compensate for the spring loaded return to "open"..not always precise.
+            if (clip_pos < self._min_position + 100) and self.state != ShadowtacGripper.State.OPEN:
                 self.command_interface.send_command(CommandID.CMD_OPEN_GRIPPER, struct.pack(""))
                 self.state = ShadowtacGripper.State.OPEN
                 success = True
-            elif clip_pos == self._max_position:
+            elif (clip_pos > self._max_position - 100) and self.state != ShadowtacGripper.State.CLOSED:
                 self.command_interface.send_command(CommandID.CMD_CLOSE_GRIPPER, struct.pack(""))
                 self.state = ShadowtacGripper.State.CLOSED
                 success = True

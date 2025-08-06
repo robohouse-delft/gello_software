@@ -133,7 +133,19 @@ def main(config):
                     reset_joints = reset_joints[:-1]
             else:
                 reset_joints = np.asarray(np.deg2rad(env_config["start_joints_deg"]))
-            agent = GelloAgent(port=gello_port, start_joints=np.deg2rad(env_config["start_joints_deg"]) if env_config["start_joints_deg"] is not None else None)
+            gripper_config = None if robot_config["gripper"] == "none" else env_config["gripper_config"]
+            start_joints = None
+            if gripper_config is not None:
+                reset_joints = reset_joints + [0]
+                start_joints = np.deg2rad(env_config["start_joints_deg"] + [0.0])
+            agent = GelloAgent(
+                port=gello_port,
+                joint_ids=env_config["joint_ids"],
+                joint_signs=env_config["joint_signs"],
+                joint_offsets=env_config["joint_offsets"],
+                gripper_config=gripper_config,
+                start_joints=start_joints
+            )
             curr_joints = env.get_obs()["joint_positions"]
             if reset_joints.shape == curr_joints.shape:
                 max_delta = (np.abs(curr_joints - reset_joints)).max()
