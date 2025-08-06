@@ -31,6 +31,7 @@ class URRobot(Robot):
         except Exception as e:
             print(e)
             print(robot_ip)
+            raise ConnectionError(e)
 
         self.r_inter = rtde_receive.RTDEReceiveInterface(robot_ip)
 
@@ -163,12 +164,16 @@ class URRobot(Robot):
 
     def _is_within_limits(self, q_vec: np.ndarray) -> bool:
         within_limits = True
-        pose = self.robot.getForwardKinematics(q_vec, self.tcp_offset)
-        if pose[0] < self.x_limits[0] or pose[0] > self.x_limits[1]:
-            within_limits = False
-        elif pose[1] < self.y_limits[0] or pose[1] > self.y_limits[1]:
-            within_limits = False
-        elif pose[2] < self.z_limits[0] or pose[2] > self.z_limits[1]:
+        try:
+            pose = self.robot.getForwardKinematics(q_vec, self.tcp_offset)
+            if pose[0] < self.x_limits[0] or pose[0] > self.x_limits[1]:
+                within_limits = False
+            elif pose[1] < self.y_limits[0] or pose[1] > self.y_limits[1]:
+                within_limits = False
+            elif pose[2] < self.z_limits[0] or pose[2] > self.z_limits[1]:
+                within_limits = False
+        except RuntimeError as e:
+            print(e)
             within_limits = False
         return within_limits
 
