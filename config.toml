@@ -13,7 +13,7 @@ joint_offsets = [6.283, 3.142, 4.712, 1.571, 3.142, 6.283]
 gripper_config=[7, 194, 152]
 mock = false
 use_save_interface = false
-data_dir = "~/bc_data"
+data_dir = "./data"
 bimanual = false
 verbose = false
 
@@ -37,5 +37,5 @@ ports = [5000, 5001]
 hostname = "127.0.0.1"
 
 [output]
-source_dir = "~/bc_data"
+source_dir = "./data"
 vis = true

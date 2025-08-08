@@ -2,24 +2,7 @@ from typing import Dict
 
 import cv2
 import numpy as np
-import torch
 import transforms3d._gohlketransforms as ttf
-
-
-def to_torch(array, device="cpu"):
-    if isinstance(array, torch.Tensor):
-        return array.to(device)
-    if isinstance(array, np.ndarray):
-        return torch.from_numpy(array).to(device)
-    else:
-        return torch.tensor(array).to(device)
-
-
-def to_numpy(array):
-    if isinstance(array, torch.Tensor):
-        return array.cpu().numpy()
-    return array
-
 
 def center_crop(rgb_frame, depth_frame):
     H, W = rgb_frame.shape[-2:]
