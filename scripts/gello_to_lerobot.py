@@ -1,9 +1,11 @@
+import os
 import pickle
 import shutil
 from pathlib import Path
 
 import numpy as np
 import torch
+import decord
 from datasets import Dataset, Features, Image, Sequence, Value
 from PIL import Image as PILImage
 import tqdm
@@ -30,17 +32,66 @@ GELLO_FEATURES = {
         "shape": (7,),
         "names": ["ee_pos_quat"],
     },
-    # "observation.images": {
-    #     "dtype": "video",
-    #     "shape": (640, 480, 3),
-    #     "names": ["frames"],
-    # },
+    "observation.images.wrist.rgb": {
+        "dtype": "video",
+        "shape": (256, 256, 3),
+        "names": ["height", "width", "channel"],
+    },
+    "observation.images.wrist.depth": {
+        "dtype": "video",
+        "shape": (256, 256, 3),
+        "names": ["height", "width", "channel"],
+    },
+    "observation.images.base.rgb": {
+        "dtype": "video",
+        "shape": (256, 256, 3),
+        "names": ["height", "width", "channel"],
+    },
+    "observation.images.base.depth": {
+        "dtype": "video",
+        "shape": (256, 256, 3),
+        "names": ["height", "width", "channel"],
+    },
     "action": {
         "dtype": "float32",
         "shape": (7,),
         "names": ["joint_commands"],
     },
 }
+
+def depth_to_rgb(depth_img):
+    """Convert single-channel depth image to 3-channel grayscale RGB."""
+    if depth_img.shape[-1] == 1:  # (H, W, 1)
+        return np.repeat(depth_img, 3, axis=-1)
+    elif depth_img.shape[0] == 1:  # (1, H, W)
+        return np.repeat(depth_img, 3, axis=0)
+    else:
+        raise ValueError(f"Unexpected depth shape: {depth_img.shape}")
+
+def to_channels_last(img):
+    # If it's torch.Tensor, use permute
+    if hasattr(img, 'permute'):
+        return img.permute(1, 2, 0)  # (C,H,W) → (H,W,C)
+    # If it's numpy array
+    elif isinstance(img, np.ndarray):
+        return np.transpose(img, (1, 2, 0))
+    else:
+        raise TypeError(f"Unsupported image type: {type(img)}")
+
+def load_video_frames_batch(video_path: Path, num_frames: int) -> np.ndarray:
+    """Load all video frames at once using decord.
+    
+    Args:
+        video_path: Path to the video file
+        num_frames: Number of frames to load
+        
+    Returns:
+        np.ndarray: Batch of video frames in (N, H, W, C) format
+    """
+    vr = decord.VideoReader(str(video_path), ctx=decord.cpu(0))
+    frame_indices = list(range(min(len(vr), num_frames)))
+    frames_batch = vr.get_batch(frame_indices).asnumpy()
+    return frames_batch
 
 def load_from_raw(raw_dir, out_dir, fps, video, debug):
     raw_dir = Path(raw_dir)
@@ -142,7 +193,7 @@ def load_from_raw(raw_dir, out_dir, fps, video, debug):
                     # encode images to a mp4 video
                     fname = f"{key}_episode_{episode_idx:06d}.mp4"
                     video_path = out_dir /  fname
-                    encode_video_frames(tmp_imgs_dir, video_path, fps)
+                    encode_video_frames(tmp_imgs_dir, video_path, fps, vcodec="h264", overwrite=True)
 
                     # clean temporary images directory
                     shutil.rmtree(tmp_imgs_dir)
@@ -219,7 +270,7 @@ def to_hf_dataset(data_dict, video):
     features["observation.joint_vel"] = Sequence(
         length=data_dict["observation.joint_vel"].shape[1], feature=Value(dtype="float32", id=None)
     )
-    #features["wrench"] = Sequence(Value(dtype="float32", id=None), length=6)
+    # features["wrench"] = Sequence(Value(dtype="float32", id=None), length=6)
     # features["fingertips"] = Sequence(Value(dtype="float32", id=None), length=32)
     # features["accelerometer"] = Value(dtype="float32", id=None)
 
@@ -236,6 +287,9 @@ def to_hf_dataset(data_dict, video):
 
     hf_dataset = Dataset.from_dict(data_dict, features=Features(features))
     hf_dataset.set_transform(hf_transform_to_torch)
+    row = hf_dataset[0]
+    for k, v in row.items():
+        print(k, type(v), v if isinstance(v, (int, float, str)) else f"[{type(v)}]")
     return hf_dataset
 
 
@@ -260,8 +314,23 @@ def from_raw_to_lerobot_format(raw_dir: Path, out_dir: Path, fps=None, video=Tru
 if __name__ == "__main__":
     repo_name = "ur5e_gello_cube_v1"
     task_name = "pick and place black cube into white bowl"
-    fps = 100
-    hf_dataset, episode_data_index, info = from_raw_to_lerobot_format(Path("../data/gello"), Path("../lerobot_data"), fps=fps, video=False)
+    gello_dir = Path.home() / Path("dev/gello_software/data/gello")
+    videos_dir = Path.home() / Path("dev/gello_software/data/videos/ur5e_gello_cube_v1")
+    video_fps = 30
+    action_fps = 100
+
+    hf_dataset_path = gello_dir / "tmp_data.pkl"
+    if hf_dataset_path.exists():
+        print("Loading hf_dataset from pickle file")
+        with open(hf_dataset_path, "rb") as inp:
+            hf_dataset, episode_data_index, info = pickle.load(inp)
+    else:
+        print("Converting raw data to lerobot format")
+        hf_dataset, episode_data_index, info = from_raw_to_lerobot_format(gello_dir, videos_dir, fps=video_fps, video=False)
+
+        # Save a tmp of hf_dataset to pickle file
+        with open(gello_dir / "tmp_data.pkl", "wb") as outp:
+            pickle.dump((hf_dataset, episode_data_index, info), outp, pickle.HIGHEST_PROTOCOL)
 
     dataset_path = Path.home() / ".cache/huggingface/lerobot/" / repo_name
     if dataset_path.exists():
@@ -274,10 +343,10 @@ if __name__ == "__main__":
     print("\nCreating dataset...")
     dataset = LeRobotDataset.create(
         repo_id=repo_name,
-        fps=fps,
+        fps=video_fps,
         features=GELLO_FEATURES,
         tolerance_s=0.02,
-        use_videos=False
+        use_videos=True,
     )
 
     print("Camera keys:", dataset.meta.camera_keys)
@@ -285,15 +354,17 @@ if __name__ == "__main__":
     for ep_idx in episodes:
         from_idx = episode_data_index["from"][ep_idx].item()
         to_idx = episode_data_index["to"][ep_idx].item()
-        num_frames = to_idx - from_idx
+        num_frames = int(to_idx - from_idx)
+
+        # Load all video frames for this episode at once
+        # video_paths = sorted(videos_dir.glob(f"*_episode_{ep_idx:06d}.mp4"))  # Adjust this if you have multiple video files
+        # video_frames_batch_dict = {}
+        # for video_path in video_paths:
+        #     video_frames_batch_dict[video_path] = load_video_frames_batch(video_path, num_frames)
 
         for frame_idx in range(num_frames):
-            i = from_idx + frame_idx
+            i = int(from_idx + frame_idx)
             frame_data = hf_dataset[i]
-
-            # video_frame = generate_test_video_frame(
-            #     width=640, height=480, frame_idx=frame_idx
-            # )  # dummy images
 
             frame = {
                 key: frame_data[key].numpy().astype(np.float32)
@@ -304,8 +375,26 @@ if __name__ == "__main__":
                     "action"
                 ]
             }
-            # frame["observation.images"] = np.array(video_frame)
+            # for key in video_frames_batch_dict.keys():
+            #     video_frames_batch = video_frames_batch_dict[key]
+            #     clamped_idx = min(frame_idx, len(video_frames_batch)-1)
+            #     if "base" in key and "depth" in key:
+            #         frame["observation.images.base.depth"] = video_frames_batch[clamped_idx]
+            #     elif "base" in key and "rgb" in key:
+            #         frame["observation.images.base.rgb"] = video_frames_batch[clamped_idx]
+            #     elif "wrist" in key and "depth" in key:
+            #         frame["observation.images.wrist.depth"] = video_frames_batch[clamped_idx]
+            #     elif "wrist" in key and "rgb" in key:
+            #         frame["observation.images.wrist.rgb"] = video_frames_batch[clamped_idx]
+            #     else:
+            #         raise ValueError()
+
             # frame["timestamp"] = frame_data["timestamp"]
+            frame["observation.images.wrist.rgb"] = to_channels_last(frame_data["observation.images.wrist.rgb"])
+            frame["observation.images.wrist.depth"] = depth_to_rgb(to_channels_last(frame_data["observation.images.wrist.depth"]))
+            frame["observation.images.base.rgb"] = to_channels_last(frame_data["observation.images.base.rgb"])
+            frame["observation.images.base.depth"] = depth_to_rgb(to_channels_last(frame_data["observation.images.base.depth"]))
+
 
             dataset.add_frame(frame, task=task_name)
 
@@ -329,5 +418,8 @@ if __name__ == "__main__":
 
     # You can also get a short summary by simply printing the object:
     print(ds_meta)
+
+    print(f"Deleting tmp hf_dataset file: {hf_dataset_path}")
+    os.remove(hf_dataset_path)
 
 
