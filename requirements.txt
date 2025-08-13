@@ -16,3 +16,5 @@ xarm-python-sdk
 numpy-quaternion
 termcolor
 toml
+datasets
+lerobot[all]==0.3.3
