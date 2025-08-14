@@ -1,10 +1,10 @@
 [env]
-agent = "gello"
+agent = "lerobot_replay"
 robot_port = 6001
 wrist_camera_port = 5000
 base_camera_port = 5001
 hostname = "127.0.0.1"
-freq_hz = 100
+freq_hz = 30
 joint_ids=[1, 2, 3, 4, 5, 6]
 start_joints_deg = [0.0, -90.0, -90.0, -90.0, 90.0, 0.0]
 joint_signs = [1.0, 1.0, -1.0, 1.0, 1.0, 1.0]
@@ -12,7 +12,7 @@ joint_signs = [1.0, 1.0, -1.0, 1.0, 1.0, 1.0]
 joint_offsets = [6.283, 3.142, 4.712, 1.571, 3.142, 6.283]
 gripper_config=[7, 194, 152]
 mock = false
-use_save_interface = true
+use_save_interface = false
 data_dir = "./data"
 bimanual = false
 verbose = false
@@ -39,3 +39,8 @@ hostname = "127.0.0.1"
 [output]
 source_dir = "./data"
 vis = true
+
+[lerobot]
+dataset_url = "ur5e_gello_cube_v1"
+episode_idx = 0
+checkpoint_path = "todo"

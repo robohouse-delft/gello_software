@@ -165,65 +165,73 @@ def main(config):
             agent = SpacemouseAgent(robot_type=env_config["robot_type"], verbose=env_config["verbose"])
         elif env_config["agent"] == "dummy" or env_config["agent"] == "none":
             agent = DummyAgent(num_dofs=robot_client.num_dofs())
-        elif env_config["agent"] == "policy":
-            raise NotImplementedError("add your imitation policy here if there is one")
+        elif env_config["agent"] == "lerobot_replay":
+            from gello.agents.lerobot_agent import LeRobotReplayAgent
+
+            agent = LeRobotReplayAgent(config["lerobot"]["dataset_url"], episode_idx=config["lerobot"]["episode_idx"])
+        elif env_config["agent"] == "lerobot_policy":
+            from gello.agents.lerobot_agent import LeRobotAgent, load_act_policy
+
+            policy = load_act_policy(config["lerobot"]["checkpoint_path"])
+            agent = LeRobotAgent(policy)
         else:
             raise ValueError("Invalid agent name")
 
     # going to start position
-    print("Going to start position")
-    start_pos = np.asarray(agent.act(env.get_obs()))
     obs = env.get_obs()
-    joints = obs["joint_positions"]
+    if env_config["agent"] == "gello":
+        print("Going to start position")
+        start_pos = np.asarray(agent.act(env.get_obs()))
+        joints = obs["joint_positions"]
 
-    abs_deltas = np.abs(start_pos - joints)
-    id_max_joint_delta = np.argmax(abs_deltas)
+        abs_deltas = np.abs(start_pos - joints)
+        id_max_joint_delta = np.argmax(abs_deltas)
 
-    max_joint_delta = 0.8
-    if abs_deltas[id_max_joint_delta] > max_joint_delta:
-        id_mask = abs_deltas > max_joint_delta
-        print()
-        ids = np.arange(len(id_mask))[id_mask]
-        for i, delta, joint, current_j in zip(
-            ids,
-            abs_deltas[id_mask],
-            start_pos[id_mask],
-            joints[id_mask],
-        ):
-            print(
-                f"joint[{i}]: \t delta: {delta:4.3f} , leader: \t{joint:4.3f} , follower: \t{current_j:4.3f}"
-            )
-        return
+        max_joint_delta = 0.8
+        if abs_deltas[id_max_joint_delta] > max_joint_delta:
+            id_mask = abs_deltas > max_joint_delta
+            print()
+            ids = np.arange(len(id_mask))[id_mask]
+            for i, delta, joint, current_j in zip(
+                ids,
+                abs_deltas[id_mask],
+                start_pos[id_mask],
+                joints[id_mask],
+            ):
+                print(
+                    f"joint[{i}]: \t delta: {delta:4.3f} , leader: \t{joint:4.3f} , follower: \t{current_j:4.3f}"
+                )
+            return
 
-    print(f"Start pos: {len(start_pos)}", f"Joints: {len(joints)}")
-    assert len(start_pos) == len(joints), (
-        f"agent output dim = {len(start_pos)}, but env dim = {len(joints)}"
-    )
+        print(f"Start pos: {len(start_pos)}", f"Joints: {len(joints)}")
+        assert len(start_pos) == len(joints), (
+            f"agent output dim = {len(start_pos)}, but env dim = {len(joints)}"
+        )
 
-    max_delta = 0.05
-    for _ in range(25):
+        max_delta = 0.05
+        for _ in range(25):
+            obs = env.get_obs()
+            command_joints = agent.act(obs)
+            current_joints = obs["joint_positions"]
+            delta = command_joints - current_joints
+            max_joint_delta = np.abs(delta).max()
+            if max_joint_delta > max_delta:
+                delta = delta / max_joint_delta * max_delta
+            env.step(current_joints + delta)
+
         obs = env.get_obs()
-        command_joints = agent.act(obs)
-        current_joints = obs["joint_positions"]
-        delta = command_joints - current_joints
-        max_joint_delta = np.abs(delta).max()
-        if max_joint_delta > max_delta:
-            delta = delta / max_joint_delta * max_delta
-        env.step(current_joints + delta)
+        joints = obs["joint_positions"]
+        action = agent.act(obs)
+        if (action - joints > 0.5).any():
+            print("Action is too big")
 
-    obs = env.get_obs()
-    joints = obs["joint_positions"]
-    action = agent.act(obs)
-    if (action - joints > 0.5).any():
-        print("Action is too big")
-
-        # print which joints are too big
-        joint_index = np.where(action - joints > 0.8)
-        for j in joint_index:
-            print(
-                f"Joint [{j}], leader: {action[j]}, follower: {joints[j]}, diff: {action[j] - joints[j]}"
-            )
-        exit()
+            # print which joints are too big
+            joint_index = np.where(action - joints > 0.8)
+            for j in joint_index:
+                print(
+                    f"Joint [{j}], leader: {action[j]}, follower: {joints[j]}, diff: {action[j] - joints[j]}"
+                )
+            exit()
 
     if env_config["use_save_interface"]:
         from gello.data_utils.keyboard_interface import KBReset

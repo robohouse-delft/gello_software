@@ -5,9 +5,9 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import decord
 from datasets import Dataset, Features, Image, Sequence, Value
 from PIL import Image as PILImage
+
 import tqdm
 from lerobot.datasets.push_dataset_to_hub.utils import concatenate_episodes, save_images_concurrently, calculate_episode_data_index, get_default_encoding
 from lerobot.datasets.utils import (
@@ -77,21 +77,6 @@ def to_channels_last(img):
         return np.transpose(img, (1, 2, 0))
     else:
         raise TypeError(f"Unsupported image type: {type(img)}")
-
-def load_video_frames_batch(video_path: Path, num_frames: int) -> np.ndarray:
-    """Load all video frames at once using decord.
-    
-    Args:
-        video_path: Path to the video file
-        num_frames: Number of frames to load
-        
-    Returns:
-        np.ndarray: Batch of video frames in (N, H, W, C) format
-    """
-    vr = decord.VideoReader(str(video_path), ctx=decord.cpu(0))
-    frame_indices = list(range(min(len(vr), num_frames)))
-    frames_batch = vr.get_batch(frame_indices).asnumpy()
-    return frames_batch
 
 def load_from_raw(raw_dir, out_dir, fps, video, debug):
     raw_dir = Path(raw_dir)
@@ -175,13 +160,10 @@ def load_from_raw(raw_dir, out_dir, fps, video, debug):
                 if "depth" in key:
                     episode_dict[key] = [x[..., 0] for x in episode_dict[key]]
 
-                # resize to 256x256
-                from PIL import Image
-                import numpy as np
-
+                # resize image
                 def resize(np_array):
-                    img = Image.fromarray(np_array)
-                    img = img.resize((256,256),Image.Resampling.BICUBIC)
+                    img = PILImage.fromarray(np_array)
+                    img = img.resize((256,256), PILImage.Resampling.BICUBIC)
                     img = np.array(img)
                     return img 
                 episode_dict[key] = [resize(x) for x in episode_dict[key]]
@@ -208,7 +190,7 @@ def load_from_raw(raw_dir, out_dir, fps, video, debug):
                     episode_dict[key] = [PILImage.fromarray(x) for x in episode_dict[key]]
 
             else:
-                episode_dict[key] = torch.tensor(episode_dict[key])
+                episode_dict[key] = torch.tensor(np.asarray(episode_dict[key]))
 
         episode_dicts.append(episode_dict)
         # state = joint_positions + gripper_position
@@ -298,7 +280,9 @@ def from_raw_to_lerobot_format(raw_dir: Path, out_dir: Path, fps=None, video=Tru
         fps = 10
 
     data_dict, episode_data_index = load_from_raw(raw_dir, out_dir, fps, video, debug)
+    print("Loaded gello dataset into memory")
     hf_dataset = to_hf_dataset(data_dict, video)
+    print("Converted dataset to Huggingface format")
     episode_data_index = calculate_episode_data_index(hf_dataset)
 
     info = {
@@ -316,8 +300,7 @@ if __name__ == "__main__":
     task_name = "pick and place black cube into white bowl"
     gello_dir = Path.home() / Path("dev/gello_software/data/gello")
     videos_dir = Path.home() / Path("dev/gello_software/data/videos/ur5e_gello_cube_v1")
-    video_fps = 30
-    action_fps = 100
+    fps = 30
 
     hf_dataset_path = gello_dir / "tmp_data.pkl"
     if hf_dataset_path.exists():
@@ -326,7 +309,7 @@ if __name__ == "__main__":
             hf_dataset, episode_data_index, info = pickle.load(inp)
     else:
         print("Converting raw data to lerobot format")
-        hf_dataset, episode_data_index, info = from_raw_to_lerobot_format(gello_dir, videos_dir, fps=video_fps, video=False)
+        hf_dataset, episode_data_index, info = from_raw_to_lerobot_format(gello_dir, videos_dir, fps=fps, video=False)
 
         # Save a tmp of hf_dataset to pickle file
         with open(gello_dir / "tmp_data.pkl", "wb") as outp:
@@ -343,9 +326,9 @@ if __name__ == "__main__":
     print("\nCreating dataset...")
     dataset = LeRobotDataset.create(
         repo_id=repo_name,
-        fps=video_fps,
+        fps=fps,
         features=GELLO_FEATURES,
-        tolerance_s=0.02,
+        tolerance_s=0.03,
         use_videos=True,
     )
 
