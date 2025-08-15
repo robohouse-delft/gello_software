@@ -235,12 +235,15 @@ def main(config):
 
     if env_config["use_save_interface"]:
         from gello.data_utils.keyboard_interface import KBReset
+        from gello.data_utils.format_obs import LeRobotDatasetRecorder
 
         kb_interface = KBReset()
+        lerobot_recorder = LeRobotDatasetRecorder(config["lerobot"]["dataset_url"], env_config["freq_hz"])
 
     print_color("\nStart 🚀🚀🚀", color="green", attrs=("bold",))
 
     save_path = None
+    prev_state = None
     start_time = time.time()
     while True:
         num = time.time() - start_time
@@ -266,12 +269,16 @@ def main(config):
                 save_path.mkdir(parents=True, exist_ok=True)
                 print(f"Saving to {save_path}")
             elif state == "save":
-                assert save_path is not None, "something went wrong"
-                save_frame(save_path, dt, obs, action)
+                # assert save_path is not None, "something went wrong"
+                # save_frame(save_path, dt, obs, action)
+                lerobot_recorder.add_frame("test", dt, obs, action)
             elif state == "normal":
                 save_path = None
+                if prev_state == "save":
+                    lerobot_recorder.save_episode()
             else:
                 raise ValueError(f"Invalid state {state}")
+            prev_state = state
         obs = env.step(action)
 
 

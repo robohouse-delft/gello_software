@@ -1,14 +1,11 @@
-import os
+from typing import Dict
 import pickle
 import shutil
 from pathlib import Path
 
 import numpy as np
-import torch
-from PIL import Image as PILImage
 import tqdm
 
-from lerobot.datasets.utils import hf_transform_to_torch
 from lerobot.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
 
 # ---------- CONFIG ----------
@@ -40,37 +37,37 @@ def to_channels_last(img):
     else:
         raise TypeError(f"Unsupported image type: {type(img)}")
 
+def to_lerobot_frame(step_data: Dict) -> Dict:
+    # Remap keys
+    frame = {}
+    frame["observation.state"] = step_data["joint_positions"].astype(np.float32)
+    frame["observation.joint_vel"] = step_data["joint_velocities"].astype(np.float32)
+    frame["observation.ee_pose"] = step_data["ee_pos_quat"].astype(np.float32)
+    frame["action"] = step_data["control"].astype(np.float32)
+
+    # Handle images
+    for key in list(step_data.keys()):
+        if "rgb" in key or "depth" in key:
+            cam_name, img_type = key.split("_")[0], key.split("_")[1]
+            new_key = f"observation.images.{cam_name}.{img_type}"
+            img = step_data[key].astype("uint8")
+            if "depth" in key:
+                img = depth_to_rgb(img)
+            # Resize image.
+            # img = PILImage.fromarray(img).resize((256, 256), PILImage.Resampling.BICUBIC)
+            frame[new_key] = np.array(img)
+    return frame
+
+
 def process_episode(episode_path, dataset, fps, task_name):
     """Load one episode and save it directly to LeRobotDataset."""
     step_paths = sorted(episode_path.glob("*.pkl"))
 
-    with open(step_paths[0], "rb") as f:
-        first_step = pickle.load(f)
-        keys = list(first_step.keys())
-
-    for step_idx, step_path in enumerate(step_paths):
+    for _, step_path in enumerate(step_paths):
         with open(step_path, "rb") as f:
             step_data = pickle.load(f)
 
-        # Remap keys
-        frame = {}
-        frame["observation.state"] = step_data["joint_positions"].astype(np.float32)
-        frame["observation.joint_vel"] = step_data["joint_velocities"].astype(np.float32)
-        frame["observation.ee_pose"] = step_data["ee_pos_quat"].astype(np.float32)
-        frame["action"] = step_data["control"].astype(np.float32)
-
-        # Handle images
-        for key in list(step_data.keys()):
-            if "rgb" in key or "depth" in key:
-                cam_name, img_type = key.split("_")[0], key.split("_")[1]
-                new_key = f"observation.images.{cam_name}.{img_type}"
-                img = step_data[key].astype("uint8")
-                if "depth" in key:
-                    img = depth_to_rgb(img)
-                # Resize image.
-                # img = PILImage.fromarray(img).resize((256, 256), PILImage.Resampling.BICUBIC)
-                frame[new_key] = np.array(img)
-
+        frame = to_lerobot_frame(step_data)
         dataset.add_frame(frame, task=task_name)
 
     dataset.save_episode()
@@ -87,8 +84,8 @@ def convert_to_lerobot(raw_dir, out_dir, repo_name, task_name, fps=30):
         repo_id=repo_name,
         fps=fps,
         features=GELLO_FEATURES,
-        tolerance_s=0.03,
-        use_videos=True,
+        image_writer_threads=10,
+        image_writer_processes=5,
     )
 
     episode_paths = sorted([x for x in Path(raw_dir).glob("*") if x.is_dir()])
