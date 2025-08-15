@@ -2,6 +2,8 @@ import time
 import numpy as np
 from typing import Dict
 import torch
+from torchvision.transforms import Resize, InterpolationMode
+from PIL import Image as PILImage
 from gello.agents.agent import Agent
 from lerobot.policies.act.modeling_act import ACTPolicy
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -16,6 +18,7 @@ def load_act_policy(checkpoint_path: str) -> ACTPolicy:
 class LeRobotAgent(Agent):
     def __init__(self, policy: ACTPolicy) -> None:
         self.policy = policy
+        self.image_resizer = Resize((256, 256), interpolation=InterpolationMode.BICUBIC)
 
     def act(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
         """
@@ -28,15 +31,27 @@ class LeRobotAgent(Agent):
         wrist_depth_img = obs["wrist_depth"]
         joint_positions = obs["joint_positions"]
 
+        # Resize images
+        # base_rgb_img = Resize(base_rgb_img).resize((256, 256), PILImage.Resampling.BICUBIC)
+        # base_depth_img = PILImage.fromarray(base_depth_img).resize((256, 256), PILImage.Resampling.BICUBIC)
+        # wrist_rgb_img = PILImage.fromarray(wrist_rgb_img).resize((256, 256), PILImage.Resampling.BICUBIC)
+        # wrist_depth_img = PILImage.fromarray(wrist_depth_img).resize((256, 256), PILImage.Resampling.BICUBIC)
+
+
         # already contains the gripper position
-        state = torch.tensor(joint_positions).unsqueeze(0).float()
+        state = torch.tensor(joint_positions, device=torch.device('cuda:0')).unsqueeze(0).float()
 
         # format to torch tensors
-        base_rgb_img = torch.tensor(base_rgb_img).permute(2, 0, 1).unsqueeze(0).float() / 255
-        base_depth_img = torch.tensor(base_depth_img).permute(2, 0, 1).unsqueeze(0).float() / 255
-        wrist_rgb_img = torch.tensor(wrist_rgb_img).permute(2, 0, 1).unsqueeze(0).float() / 255
-        wrist_depth_img = torch.tensor(wrist_depth_img).permute(2, 0, 1).unsqueeze(0).float() / 255
+        base_rgb_img = torch.tensor(base_rgb_img, device=torch.device('cuda:0')).permute(2, 0, 1).unsqueeze(0).float() / 255
+        base_depth_img = torch.tensor(base_depth_img, device=torch.device('cuda:0')).permute(2, 0, 1).unsqueeze(0).float() / 255
+        wrist_rgb_img = torch.tensor(wrist_rgb_img, device=torch.device('cuda:0')).permute(2, 0, 1).unsqueeze(0).float() / 255
+        wrist_depth_img = torch.tensor(wrist_depth_img, device=torch.device('cuda:0')).permute(2, 0, 1).unsqueeze(0).float() / 255
 
+        # Resize images
+        base_rgb_img = self.image_resizer.forward(base_rgb_img)
+        base_depth_img = self.image_resizer.forward(base_depth_img)
+        wrist_rgb_img = self.image_resizer.forward(wrist_rgb_img)
+        wrist_depth_img = self.image_resizer.forward(wrist_depth_img)
 
         formatted_obs = {
             "observation.images.base.rgb": base_rgb_img,
@@ -47,7 +62,7 @@ class LeRobotAgent(Agent):
         }
         action = self.policy.select_action(formatted_obs)
 
-        action = action.squeeze().detach().numpy()
+        action = action.squeeze().detach().cpu().numpy()
 
         # append gripper position dummy if the gripper was not controlled by the policy (output dim = 6)
         if len(action) == 6:

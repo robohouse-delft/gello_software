@@ -3,6 +3,7 @@ import pickle
 import shutil
 from pathlib import Path
 
+from PIL import Image as PILImage
 import numpy as np
 import tqdm
 
@@ -13,10 +14,10 @@ GELLO_FEATURES = {
     "observation.state": {"dtype": "float32", "shape": (7,), "names": ["joint_positions"]},
     "observation.joint_vel": {"dtype": "float32", "shape": (7,), "names": ["joint_velocities"]},
     "observation.ee_pose": {"dtype": "float32", "shape": (7,), "names": ["ee_pos_quat"]},
-    "observation.images.wrist.rgb": {"dtype": "video", "shape": (480, 640, 3), "names": ["height", "width", "channel"]},
-    "observation.images.wrist.depth": {"dtype": "video", "shape": (480, 640, 3), "names": ["height", "width", "channel"]},
-    "observation.images.base.rgb": {"dtype": "video", "shape": (480, 640, 3), "names": ["height", "width", "channel"]},
-    "observation.images.base.depth": {"dtype": "video", "shape": (480, 640, 3), "names": ["height", "width", "channel"]},
+    "observation.images.wrist.rgb": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
+    "observation.images.wrist.depth": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
+    "observation.images.base.rgb": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
+    "observation.images.base.depth": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
     "action": {"dtype": "float32", "shape": (7,), "names": ["joint_commands"]},
 }
 
@@ -54,7 +55,7 @@ def to_lerobot_frame(step_data: Dict) -> Dict:
             if "depth" in key:
                 img = depth_to_rgb(img)
             # Resize image.
-            # img = PILImage.fromarray(img).resize((256, 256), PILImage.Resampling.BICUBIC)
+            img = PILImage.fromarray(img).resize((256, 256), PILImage.Resampling.BICUBIC)
             frame[new_key] = np.array(img)
     return frame
 
@@ -97,9 +98,9 @@ def convert_to_lerobot(raw_dir, out_dir, repo_name, task_name, fps=30):
     print(ds_meta)
 
 if __name__ == "__main__":
-    repo_name = "ur5e_gello_cube_v1"
+    repo_name = "ur5e_gello_cube_v2"
     task_name = "pick and place black cube into white bowl"
     gello_dir = Path.home() / "dev/gello_software/data/gello"
-    videos_dir = Path.home() / "dev/gello_software/data/videos/ur5e_gello_cube_v1"
+    videos_dir = Path.home() / "dev/gello_software/data/videos/ur5e_gello_cube_v2"
 
     convert_to_lerobot(gello_dir, videos_dir, repo_name, task_name, fps=30)
