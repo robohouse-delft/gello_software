@@ -26,16 +26,10 @@ class LeRobotAgent(Agent):
         """
 
         base_rgb_img = obs["base_rgb"]
-        base_depth_img = obs["base_depth"]
+        # base_depth_img = obs["base_depth"]
         wrist_rgb_img = obs["wrist_rgb"]
-        wrist_depth_img = obs["wrist_depth"]
+        # wrist_depth_img = obs["wrist_depth"]
         joint_positions = obs["joint_positions"]
-
-        # Resize images
-        # base_rgb_img = Resize(base_rgb_img).resize((256, 256), PILImage.Resampling.BICUBIC)
-        # base_depth_img = PILImage.fromarray(base_depth_img).resize((256, 256), PILImage.Resampling.BICUBIC)
-        # wrist_rgb_img = PILImage.fromarray(wrist_rgb_img).resize((256, 256), PILImage.Resampling.BICUBIC)
-        # wrist_depth_img = PILImage.fromarray(wrist_depth_img).resize((256, 256), PILImage.Resampling.BICUBIC)
 
 
         # already contains the gripper position
@@ -43,21 +37,22 @@ class LeRobotAgent(Agent):
 
         # format to torch tensors
         base_rgb_img = torch.tensor(base_rgb_img, device=torch.device('cuda:0')).permute(2, 0, 1).unsqueeze(0).float() / 255
-        base_depth_img = torch.tensor(base_depth_img, device=torch.device('cuda:0')).permute(2, 0, 1).unsqueeze(0).float() / 255
+        # base_depth_img = torch.tensor(base_depth_img, device=torch.device('cuda:0')).unsqueeze(0).float() / 255
         wrist_rgb_img = torch.tensor(wrist_rgb_img, device=torch.device('cuda:0')).permute(2, 0, 1).unsqueeze(0).float() / 255
-        wrist_depth_img = torch.tensor(wrist_depth_img, device=torch.device('cuda:0')).permute(2, 0, 1).unsqueeze(0).float() / 255
+        # wrist_depth_img = torch.tensor(wrist_depth_img, device=torch.device('cuda:0')).unsqueeze(0).float() / 255
 
         # Resize images
         base_rgb_img = self.image_resizer.forward(base_rgb_img)
-        base_depth_img = self.image_resizer.forward(base_depth_img)
+        # base_depth_img = self.image_resizer.forward(base_depth_img)
         wrist_rgb_img = self.image_resizer.forward(wrist_rgb_img)
-        wrist_depth_img = self.image_resizer.forward(wrist_depth_img)
+        # wrist_depth_img = self.image_resizer.forward(wrist_depth_img)
+        # print(base_rgb_img.shape)
 
         formatted_obs = {
             "observation.images.base.rgb": base_rgb_img,
             "observation.images.wrist.rgb": wrist_rgb_img,
-            "observation.images.base.depth": base_depth_img,
-            "observation.images.wrist.depth": wrist_depth_img,
+            # "observation.images.base.depth": base_depth_img,
+            # "observation.images.wrist.depth": wrist_depth_img,
             "observation.state": state
         }
         action = self.policy.select_action(formatted_obs)

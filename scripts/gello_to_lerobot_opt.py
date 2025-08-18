@@ -12,12 +12,12 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetad
 # ---------- CONFIG ----------
 GELLO_FEATURES = {
     "observation.state": {"dtype": "float32", "shape": (7,), "names": ["joint_positions"]},
-    "observation.joint_vel": {"dtype": "float32", "shape": (7,), "names": ["joint_velocities"]},
-    "observation.ee_pose": {"dtype": "float32", "shape": (7,), "names": ["ee_pos_quat"]},
+    # "observation.joint_vel": {"dtype": "float32", "shape": (7,), "names": ["joint_velocities"]},
+    # "observation.ee_pose": {"dtype": "float32", "shape": (7,), "names": ["ee_pos_quat"]},
     "observation.images.wrist.rgb": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
-    "observation.images.wrist.depth": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
+    # "observation.images.wrist.depth": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
     "observation.images.base.rgb": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
-    "observation.images.base.depth": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
+    # "observation.images.base.depth": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
     "action": {"dtype": "float32", "shape": (7,), "names": ["joint_commands"]},
 }
 
@@ -42,21 +42,22 @@ def to_lerobot_frame(step_data: Dict) -> Dict:
     # Remap keys
     frame = {}
     frame["observation.state"] = step_data["joint_positions"].astype(np.float32)
-    frame["observation.joint_vel"] = step_data["joint_velocities"].astype(np.float32)
-    frame["observation.ee_pose"] = step_data["ee_pos_quat"].astype(np.float32)
+    # frame["observation.joint_vel"] = step_data["joint_velocities"].astype(np.float32)
+    # frame["observation.ee_pose"] = step_data["ee_pos_quat"].astype(np.float32)
     frame["action"] = step_data["control"].astype(np.float32)
 
     # Handle images
     for key in list(step_data.keys()):
-        if "rgb" in key or "depth" in key:
+        # if "rgb" in key or "depth" in key:
+        if "rgb" in key:
             cam_name, img_type = key.split("_")[0], key.split("_")[1]
             new_key = f"observation.images.{cam_name}.{img_type}"
             img = step_data[key].astype("uint8")
             if "depth" in key:
                 img = depth_to_rgb(img)
-            # Resize image.
-            img = PILImage.fromarray(img).resize((256, 256), PILImage.Resampling.BICUBIC)
-            frame[new_key] = np.array(img)
+            # Resize image. 
+            img = np.array(PILImage.fromarray(img).resize((256, 256), PILImage.Resampling.BICUBIC))
+            frame[new_key] = img
     return frame
 
 
@@ -98,9 +99,9 @@ def convert_to_lerobot(raw_dir, out_dir, repo_name, task_name, fps=30):
     print(ds_meta)
 
 if __name__ == "__main__":
-    repo_name = "ur5e_gello_cube_v2"
+    repo_name = "ur5e_gello_cube_v3"
     task_name = "pick and place black cube into white bowl"
     gello_dir = Path.home() / "dev/gello_software/data/gello"
-    videos_dir = Path.home() / "dev/gello_software/data/videos/ur5e_gello_cube_v2"
+    videos_dir = Path.home() / "dev/gello_software/data/videos/ur5e_gello_cube_v3"
 
     convert_to_lerobot(gello_dir, videos_dir, repo_name, task_name, fps=30)

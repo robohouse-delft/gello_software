@@ -1,5 +1,5 @@
 [env]
-agent = "gello"
+agent = "lerobot_policy"
 robot_port = 6001
 wrist_camera_port = 5000
 base_camera_port = 5001
@@ -12,7 +12,7 @@ joint_signs = [1.0, 1.0, -1.0, 1.0, 1.0, 1.0]
 joint_offsets = [6.283, 3.142, 4.712, 1.571, 3.142, 6.283]
 gripper_config=[7, 194, 152]
 mock = false
-use_save_interface = true
+use_save_interface = false
 data_dir = "./data"
 bimanual = false
 verbose = false
@@ -41,6 +41,6 @@ source_dir = "./data"
 vis = true
 
 [lerobot]
-dataset_url = "ur5e_gello_cube_v2"
+dataset_url = "ur5e_gello_cube_v3"
 episode_idx = 0
-checkpoint_path = "/home/zico/dev/gello_software/outputs2/train/act_ur5e_gello_cube_v1/checkpoints/last/pretrained_model"
+checkpoint_path = "/home/zico/dev/gello_software/outputs/train/act_ur5e_gello_cube_v3/checkpoints/200000/pretrained_model"
