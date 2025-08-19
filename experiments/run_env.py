@@ -121,6 +121,8 @@ def main(config):
             print(f"Found {len(usb_ports)} ports")
             if len(usb_ports) > 0:
                 gello_port = usb_ports[0]
+                if len(usb_ports) > 1:
+                    gello_port = usb_ports[1] if "teensy" in gello_port else gello_port
                 print(f"using port {gello_port}")
             else:
                 raise ValueError(

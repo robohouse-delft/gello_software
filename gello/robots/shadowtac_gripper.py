@@ -47,6 +47,10 @@ class CommandInterface:
 
         return cmd, data
 
+def clip_val(min_val, val, max_val):
+    return max(min_val, min(val, max_val))
+
+
 class ShadowtacGripper:
     """Communicates with the gripper directly, via serial connection to shadowtac gripper"""
 
@@ -112,26 +116,24 @@ class ShadowtacGripper:
 
     def get_current_position(self) -> int:
         """Returns the current position as returned by the physical hardware."""
-        position = None
+        clip_position = None
         if self.command_interface is not None:
-            # Flush serial buffer
-            while True:
-                cmd, data = self.command_interface.receive_command()
-                if cmd is None:
-                    break
             # Trigger a position read from the sensor
             self.command_interface.send_command(CommandID.CMD_GRIPPER_POSITION, struct.pack(""))
             tries = 0
             # Wait for the response
-            while tries < 5:
+            while tries < 3:
                 cmd, data = self.command_interface.receive_command()
                 if cmd is CommandID.CMD_GRIPPER_POSITION and data is not None and len(data) > 0:
                     position_mm = struct.unpack("f", data)[0]
-                    position = ((self._max_position - self._min_position) / (self._max_position_mm - self._min_position_mm)) * position_mm - self._min_position_mm
-                    self.last_position = position
+                    position = ((self._max_position - self._min_position) / (self._max_position_mm - self._min_position_mm)) * position_mm + self._max_position
+                    clip_position = clip_val(self._min_position, position, self._max_position)
+                    self.last_position = clip_position
                     break
+                # elif cmd is CommandID.CMD_DEBUG and data is not None:
+                    # print(f"[GRIPPER DEBUG]: {data.decode('utf-8')}")
                 tries += 1
-        return position if position is not None else self.last_position
+        return clip_position if clip_position is not None else self.last_position
 
     def move(self, position: int, speed: int, force: int) -> Tuple[bool, int]:
         """Sends commands to start moving towards the given position, with the specified speed and force.
@@ -146,22 +148,17 @@ class ShadowtacGripper:
         speed = int(speed)
         force = int(force)
 
-        def clip_val(min_val, val, max_val):
-            return max(min_val, min(val, max_val))
-
         clip_pos = clip_val(self._min_position, position, self._max_position)
         # _clip_spe = clip_val(self._min_speed, speed, self._max_speed)
         # _clip_for = clip_val(self._min_force, force, self._max_force)
 
         success = False
         if self.command_interface is not None:
-            # Get latest state 
-            state = self._get_gripper_status()
-            if state is not None and state is GripperState.IDLE:
+            if self.last_position != clip_pos:
                 clip_pos_mm = ((self._max_position_mm - self._min_position_mm) / (self._max_position - self._min_position)) * clip_pos + self._min_position_mm
                 self.command_interface.send_command(CommandID.CMD_GRIPPER_POSITION, struct.pack("<f", float(clip_pos_mm)))
                 success = True
-        
+            
         return success, clip_pos
 
     def _get_gripper_status(self) -> Optional[GripperState]:
