@@ -10,10 +10,9 @@ from typing import Tuple, Optional
 class CommandID(IntEnum):
     CMD_GRIPPER_STATE = 0x01
     CMD_SLIP_SAFETY_MARGIN = 0x02
-    CMD_OPEN_GRIPPER = 0x03
-    CMD_CLOSE_GRIPPER = 0x04
-    CMD_DEBUG = 0x05
-    CMD_LOG = 0x06
+    CMD_GRIPPER_POSITION = 0x03
+    CMD_DEBUG = 0x04
+    CMD_LOG = 0x05
 
 class GripperState(IntEnum):
     IDLE = 0x01
@@ -48,13 +47,8 @@ class CommandInterface:
 
         return cmd, data
 
-
 class ShadowtacGripper:
     """Communicates with the gripper directly, via serial connection to shadowtac gripper"""
-
-    class State(Enum):
-        OPEN = 0x01
-        CLOSED = 0x02
 
     def __init__(self):
         """Constructor."""
@@ -66,14 +60,16 @@ class ShadowtacGripper:
         self._max_speed = 255
         self._min_force = 0
         self._max_force = 255
-        self.state = ShadowtacGripper.State.OPEN
+        self._min_position_mm = -25.0
+        self._max_position_mm = 0.0
+        self.last_position = 0
 
     def connect(self, port: str, baud_rate: int, timeout_s: float = 0.001) -> None:
         """Connects to the gripper over serial"""
         try:
             self.command_interface = CommandInterface(port, baud_rate=baud_rate, timeout_s=timeout_s)
             # Ensure that we are in a known state at start.
-            self.command_interface.send_command(CommandID.CMD_OPEN_GRIPPER, struct.pack(""))
+            self.command_interface.send_command(CommandID.CMD_GRIPPER_POSITION, struct.pack("<f", float(self._min_position_mm)))
         except serial.SerialException as e:
             sys.exit(e) # type: ignore
 
@@ -116,7 +112,26 @@ class ShadowtacGripper:
 
     def get_current_position(self) -> int:
         """Returns the current position as returned by the physical hardware."""
-        return 0 if self.state == ShadowtacGripper.State.OPEN else 255
+        position = None
+        if self.command_interface is not None:
+            # Flush serial buffer
+            while True:
+                cmd, data = self.command_interface.receive_command()
+                if cmd is None:
+                    break
+            # Trigger a position read from the sensor
+            self.command_interface.send_command(CommandID.CMD_GRIPPER_POSITION, struct.pack(""))
+            tries = 0
+            # Wait for the response
+            while tries < 5:
+                cmd, data = self.command_interface.receive_command()
+                if cmd is CommandID.CMD_GRIPPER_POSITION and data is not None and len(data) > 0:
+                    position_mm = struct.unpack("f", data)[0]
+                    position = ((self._max_position - self._min_position) / (self._max_position_mm - self._min_position_mm)) * position_mm - self._min_position_mm
+                    self.last_position = position
+                    break
+                tries += 1
+        return position if position is not None else self.last_position
 
     def move(self, position: int, speed: int, force: int) -> Tuple[bool, int]:
         """Sends commands to start moving towards the given position, with the specified speed and force.
@@ -135,23 +150,28 @@ class ShadowtacGripper:
             return max(min_val, min(val, max_val))
 
         clip_pos = clip_val(self._min_position, position, self._max_position)
-        clip_spe = clip_val(self._min_speed, speed, self._max_speed)
-        clip_for = clip_val(self._min_force, force, self._max_force)
+        # _clip_spe = clip_val(self._min_speed, speed, self._max_speed)
+        # _clip_for = clip_val(self._min_force, force, self._max_force)
 
         success = False
         if self.command_interface is not None:
-            # Add 50 points for hysterisis to compensate for the spring loaded return to "open"..not always precise.
-            if (clip_pos < self._min_position + 100) and self.state != ShadowtacGripper.State.OPEN:
-                self.command_interface.send_command(CommandID.CMD_OPEN_GRIPPER, struct.pack(""))
-                self.state = ShadowtacGripper.State.OPEN
-                success = True
-            elif (clip_pos > self._max_position - 100) and self.state != ShadowtacGripper.State.CLOSED:
-                self.command_interface.send_command(CommandID.CMD_CLOSE_GRIPPER, struct.pack(""))
-                self.state = ShadowtacGripper.State.CLOSED
+            # Get latest state 
+            state = self._get_gripper_status()
+            if state is not None and state is GripperState.IDLE:
+                clip_pos_mm = ((self._max_position_mm - self._min_position_mm) / (self._max_position - self._min_position)) * clip_pos + self._min_position_mm
+                self.command_interface.send_command(CommandID.CMD_GRIPPER_POSITION, struct.pack("<f", float(clip_pos_mm)))
                 success = True
         
         return success, clip_pos
 
+    def _get_gripper_status(self) -> Optional[GripperState]:
+        if self.command_interface is not None:
+            cmd, data = self.command_interface.receive_command()
+            if cmd is CommandID.CMD_GRIPPER_STATE and data is not None:
+                current_state = int.from_bytes(data, byteorder="little", signed=False)
+                return GripperState(current_state)
+
+        return None
 
 def main():
     # test open and closing the gripper
