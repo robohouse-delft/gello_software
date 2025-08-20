@@ -41,6 +41,8 @@ source_dir = "./data"
 vis = true
 
 [lerobot]
+policy = "diffusion" # act, diffusion, smolvla
 dataset_url = "ur5e_gello_cube_v3"
 episode_idx = 0
-checkpoint_path = "/home/zico/dev/gello_software/outputs/train/act_ur5e_gello_cube_v3/checkpoints/200000/pretrained_model"
+checkpoint_path = "/home/zico/dev/gello_software/outputs/train/diffusion_ur5e_gello_cube_v3/100000/pretrained_model"
+task = "pick and place black cube into white bowl"

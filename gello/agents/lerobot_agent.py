@@ -1,13 +1,15 @@
 import time
 import numpy as np
-from typing import Dict
+from typing import Dict, Union
 import torch
 from torchvision.transforms import Resize, InterpolationMode
 from PIL import Image as PILImage
 from gello.agents.agent import Agent
+from lerobot.policies.pretrained import PreTrainedPolicy
 from lerobot.policies.act.modeling_act import ACTPolicy
+from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
+from lerobot.policies.diffusion.modeling_diffusion import DiffusionPolicy
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.utils.robot_utils import busy_wait
 
 def load_act_policy(checkpoint_path: str) -> ACTPolicy:
     # Load the checkpoint
@@ -15,9 +17,22 @@ def load_act_policy(checkpoint_path: str) -> ACTPolicy:
     policy.eval()
     return policy
 
+def load_smolvla_policy(checkpoint_path: str) -> SmolVLAPolicy:
+    # Load the checkpoint
+    policy = SmolVLAPolicy.from_pretrained(checkpoint_path)
+    policy.eval()
+    return policy
+
+def load_diffusion_policy(checkpoint_path: str) -> DiffusionPolicy:
+    # Load the checkpoint
+    policy = DiffusionPolicy.from_pretrained(checkpoint_path)
+    policy.eval()
+    return policy
+
 class LeRobotAgent(Agent):
-    def __init__(self, policy: ACTPolicy) -> None:
+    def __init__(self, policy: PreTrainedPolicy, task: str) -> None:
         self.policy = policy
+        self.task = task
         self.image_resizer = Resize((256, 256), interpolation=InterpolationMode.BICUBIC)
 
     def act(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
@@ -41,19 +56,19 @@ class LeRobotAgent(Agent):
         wrist_rgb_img = torch.tensor(wrist_rgb_img, device=torch.device('cuda:0')).permute(2, 0, 1).unsqueeze(0).float() / 255
         # wrist_depth_img = torch.tensor(wrist_depth_img, device=torch.device('cuda:0')).unsqueeze(0).float() / 255
 
-        # Resize images
-        base_rgb_img = self.image_resizer.forward(base_rgb_img)
+        # Resize images (uncomment if neeeded)
+        # base_rgb_img = self.image_resizer.forward(base_rgb_img)
         # base_depth_img = self.image_resizer.forward(base_depth_img)
-        wrist_rgb_img = self.image_resizer.forward(wrist_rgb_img)
+        # wrist_rgb_img = self.image_resizer.forward(wrist_rgb_img)
         # wrist_depth_img = self.image_resizer.forward(wrist_depth_img)
-        # print(base_rgb_img.shape)
 
         formatted_obs = {
             "observation.images.base.rgb": base_rgb_img,
             "observation.images.wrist.rgb": wrist_rgb_img,
             # "observation.images.base.depth": base_depth_img,
             # "observation.images.wrist.depth": wrist_depth_img,
-            "observation.state": state
+            "observation.state": state,
+            "task": self.task
         }
         action = self.policy.select_action(formatted_obs)
 
@@ -82,52 +97,6 @@ class LeRobotReplayAgent(Agent):
         action = self.actions[self.current_episode_idx]["action"].numpy()
 
         self.current_episode_idx += 1
-        
-        return action
-    
-
-
-class LeRobotTactileAgent(Agent):
-    def __init__(self, policy) -> None:
-        self.policy = policy
-
-    def act(self, obs: dict) -> np.ndarray:
-        """
-        takes in a gello observation, turns it into a Lerobot observation and returns the action in gello format
-        """
-
-        base_image = obs["base_rgb"]
-        wrist_image = obs["wrist_rgb"]
-        #wrist_image = np.zeros((480, 640, 3))# obs["wrist_rgb"]
-        joint_positions = obs["joint_positions"]
-        fingertips = obs["fingertips"]
-        accelerometer = obs["accelerometer"]
-
-        # fingertips = np.random.randint(25,35,(32,))
-        # fingertips = [16, 35, 40, 34, 31, 15, 39, 38, 44, 8, 22, 35, 49, 38, 11, 26, 33, 28, 6, 24, 27, 28, 25, 30, 32, 26, 26, 27, 31, 28, 18, 24]
-        # accelerometer = 0
-
-
-        # already contains the gripper position
-        state = np.concatenate([joint_positions, fingertips, [accelerometer]], axis=0)
-        state = torch.tensor(state).unsqueeze(0).float()
-
-        # format to torch tensors
-        base_image = torch.tensor(base_image).permute(2, 0, 1).unsqueeze(0).float() / 255
-        wrist_image = torch.tensor(wrist_image).permute(2, 0, 1).unsqueeze(0).float() / 255
-
-        formatted_obs = {
-            "observation.images.base.rgb": base_image,
-            "observation.images.wrist.rgb": wrist_image,
-            "observation.state": state
-        }
-        action = self.policy.select_action(formatted_obs)
-
-        action = action.squeeze().detach().numpy()
-
-        # append gripper position dummy if the gripper was not controlled by the policy (output dim = 6)
-        if len(action) == 6:
-            action = np.append(action, 0.0)
         
         return action
 

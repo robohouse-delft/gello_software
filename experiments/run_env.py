@@ -1,6 +1,7 @@
 import datetime
 import glob
 import time
+from time import perf_counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
@@ -172,10 +173,20 @@ def main(config):
 
             agent = LeRobotReplayAgent(config["lerobot"]["dataset_url"], episode_idx=config["lerobot"]["episode_idx"])
         elif env_config["agent"] == "lerobot_policy":
-            from gello.agents.lerobot_agent import LeRobotAgent, load_act_policy
+            from gello.agents.lerobot_agent import LeRobotAgent, load_act_policy, load_smolvla_policy, load_diffusion_policy
 
-            policy = load_act_policy(config["lerobot"]["checkpoint_path"])
-            agent = LeRobotAgent(policy)
+            policy = None
+            match config["lerobot"]["policy"]:
+                case "act":
+                    policy = load_act_policy(config["lerobot"]["checkpoint_path"])
+                case "smolvla":
+                    policy = load_smolvla_policy(config["lerobot"]["checkpoint_path"])
+                case "diffusion":
+                    policy = load_diffusion_policy(config["lerobot"]["checkpoint_path"])
+                case _:
+                    raise ValueError("Invalid policy name")
+                
+            agent = LeRobotAgent(policy, config["lerobot"]["task"])
         else:
             raise ValueError("Invalid agent name")
 
@@ -246,10 +257,19 @@ def main(config):
 
     save_path = None
     prev_state = None
-    prev_dt = datetime.datetime.now()
     start_time = time.time()
+    loop_delay_s = 1
     while True:
         num = time.time() - start_time
+        message = f"\rTime passed (rate: {round(1 / loop_delay_s, 0)} Hz): {round(num, 2)}          "
+        print_color(
+            message,
+            color="white",
+            attrs=("bold",),
+            end="",
+            flush=True,
+        )
+        loop_start_s = perf_counter()
         action = agent.act(obs)
         dt = datetime.datetime.now()
         if env_config["use_save_interface"]:
@@ -275,15 +295,7 @@ def main(config):
                 raise ValueError(f"Invalid state {state}")
             prev_state = state
         obs = env.step(action)
-        message = f"\rTime passed (rate: {round(1 / (dt.timestamp() - prev_dt.timestamp()), 0)} Hz): {round(num, 2)}          "
-        print_color(
-            message,
-            color="white",
-            attrs=("bold",),
-            end="",
-            flush=True,
-        )
-        prev_dt = dt
+        loop_delay_s = perf_counter() - loop_start_s
 
 
 if __name__ == "__main__":
