@@ -1,408 +1,120 @@
-import os
+from typing import Dict
 import pickle
 import shutil
 from pathlib import Path
 
-import numpy as np
-import torch
-from datasets import Dataset, Features, Image, Sequence, Value
 from PIL import Image as PILImage
-
+import numpy as np
 import tqdm
-from lerobot.datasets.push_dataset_to_hub.utils import concatenate_episodes, save_images_concurrently, calculate_episode_data_index, get_default_encoding
-from lerobot.datasets.utils import (
-    hf_transform_to_torch,
-)
-from lerobot.datasets.video_utils import VideoFrame, encode_video_frames
+
 from lerobot.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
 
+# ---------- CONFIG ----------
 GELLO_FEATURES = {
-    "observation.state": {
-        "dtype": "float32",
-        "shape": (7,),
-        "names": ["joint_positions"],
-    },
-    "observation.joint_vel": {
-        "dtype": "float32",
-        "shape": (7,),
-        "names": ["joint_velocities"],
-    },
-    "observation.ee_pose": {
-        "dtype": "float32",
-        "shape": (7,),
-        "names": ["ee_pos_quat"],
-    },
-    "observation.images.wrist.rgb": {
-        "dtype": "video",
-        "shape": (256, 256, 3),
-        "names": ["height", "width", "channel"],
-    },
-    "observation.images.wrist.depth": {
-        "dtype": "video",
-        "shape": (256, 256, 3),
-        "names": ["height", "width", "channel"],
-    },
-    "observation.images.base.rgb": {
-        "dtype": "video",
-        "shape": (256, 256, 3),
-        "names": ["height", "width", "channel"],
-    },
-    "observation.images.base.depth": {
-        "dtype": "video",
-        "shape": (256, 256, 3),
-        "names": ["height", "width", "channel"],
-    },
-    "action": {
-        "dtype": "float32",
-        "shape": (7,),
-        "names": ["joint_commands"],
-    },
+    "observation.state": {"dtype": "float32", "shape": (7,), "names": ["joint_positions"]},
+    # "observation.joint_vel": {"dtype": "float32", "shape": (7,), "names": ["joint_velocities"]},
+    # "observation.ee_pose": {"dtype": "float32", "shape": (7,), "names": ["ee_pos_quat"]},
+    "observation.images.wrist.rgb": {"dtype": "video", "shape": (480, 640, 3), "names": ["height", "width", "channel"]},
+    # "observation.images.wrist.depth": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
+    "observation.images.base.rgb": {"dtype": "video", "shape": (480, 640, 3), "names": ["height", "width", "channel"]},
+    # "observation.images.base.depth": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
+    "action": {"dtype": "float32", "shape": (7,), "names": ["joint_commands"]},
 }
 
 def depth_to_rgb(depth_img):
     """Convert single-channel depth image to 3-channel grayscale RGB."""
-    if depth_img.shape[-1] == 1:  # (H, W, 1)
+    if depth_img.ndim == 3 and depth_img.shape[-1] == 1:  # (H, W, 1)
         return np.repeat(depth_img, 3, axis=-1)
-    elif depth_img.shape[0] == 1:  # (1, H, W)
+    elif depth_img.ndim == 3 and depth_img.shape[0] == 1:  # (1, H, W)
         return np.repeat(depth_img, 3, axis=0)
     else:
         raise ValueError(f"Unexpected depth shape: {depth_img.shape}")
 
 def to_channels_last(img):
-    # If it's torch.Tensor, use permute
-    if hasattr(img, 'permute'):
-        return img.permute(1, 2, 0)  # (C,H,W) → (H,W,C)
-    # If it's numpy array
+    if hasattr(img, "permute"):  # torch.Tensor
+        return img.permute(1, 2, 0)
     elif isinstance(img, np.ndarray):
         return np.transpose(img, (1, 2, 0))
     else:
         raise TypeError(f"Unsupported image type: {type(img)}")
 
-def load_from_raw(raw_dir, out_dir, fps, video, debug):
-    raw_dir = Path(raw_dir)
-    out_dir = Path(out_dir)
+def to_lerobot_frame(step_data: Dict) -> Dict:
+    # Remap keys
+    frame = {}
+    frame["observation.state"] = step_data["joint_positions"].astype(np.float32)
+    # frame["observation.joint_vel"] = step_data["joint_velocities"].astype(np.float32)
+    # frame["observation.ee_pose"] = step_data["ee_pos_quat"].astype(np.float32)
+    frame["action"] = step_data["control"].astype(np.float32)
 
-    episode_paths = list(raw_dir.glob("*"))
-    episode_paths = [x for x in episode_paths if x.is_dir()]
-    episode_paths = sorted(episode_paths)
-
-    dataset_idx = 0
-    episode_dicts = []
-    episode_data_index = {}
-    episode_data_index["from"] = []
-    episode_data_index["to"] = []
-    for episode_idx, episode_path in tqdm.tqdm(enumerate(episode_paths)):
-        step_paths = list(episode_path.glob("*.pkl"))
-        step_paths = sorted(step_paths)
-
-        episode_dict = {}
-        with open(step_paths[0], "rb") as f:
-            for key in pickle.load(f):
-                episode_dict[key] = []
-
-        for key in ["frame_index", "episode_index", "index", "timestamp", "next.done"]:
-            episode_dict[key] = []
-
-        episode_start_idx = dataset_idx
-        for step_idx, step_path in enumerate(step_paths):
-            with open(step_path, "rb") as f:
-                step_dict = pickle.load(f)
-                for key in step_dict:
-                    episode_dict[key].append(step_dict[key])
-
-            episode_dict["frame_index"].append(step_idx)
-            episode_dict["episode_index"].append(episode_idx)
-            episode_dict["index"].append(step_idx)
-            episode_dict["timestamp"].append(step_idx / fps)
-
-            # assume all demonstrations are successful at the last step.
-            episode_dict["next.done"].append(len(step_paths) - 1 == step_idx)
-            # episode_dict["next.success"] = episode_dict["next.done"]
-
-            dataset_idx += 1
-
-        episode_data_index["from"].append(episode_start_idx)
-        episode_data_index["to"].append(dataset_idx)
-
-        # rename the keys to match the expected format
-
-        episode_dict["action"] = episode_dict["control"]
-        episode_dict.pop("control")
-
-        episode_dict["observation.joint_vel"] = episode_dict["joint_velocities"]
-        episode_dict.pop("joint_velocities")
-        episode_dict["observation.ee_pose"] = episode_dict["ee_pos_quat"]
-        episode_dict.pop("ee_pos_quat")
+    # Handle images
+    for key in list(step_data.keys()):
+        # if "rgb" in key or "depth" in key:
+        if "rgb" in key:
+            cam_name, img_type = key.split("_")[0], key.split("_")[1]
+            new_key = f"observation.images.{cam_name}.{img_type}"
+            img = step_data[key].astype("uint8")
+            if "depth" in key:
+                img = depth_to_rgb(img)
+            # Resize image. 
+            # img = np.array(PILImage.fromarray(img).resize((256, 256), PILImage.Resampling.BICUBIC))
+            frame[new_key] = np.array(img)
+    return frame
 
 
-        # create spectrogram_img
-        # episode_dict["spectogram_rgb"] = episode_dict["mic_spectrogram"]
-        # episode_dict.pop("mic_spectrogram")
+def process_episode(episode_path, dataset, fps, task_name):
+    """Load one episode and save it directly to LeRobotDataset."""
+    step_paths = sorted(episode_path.glob("*.pkl"))
 
-        # episode_dict["base-cropped_rgb"] = episode_dict["base_rgb_cropped"]
-        # episode_dict.pop("base_rgb_cropped")
+    assert len(step_paths) > 0, "No pickle files found in GELLO dataset"
 
-        for key in list(episode_dict.keys()):
-            if "rgb" in key or "depth" in key:
-                # parse the key
-                cam_name, img_type = key.split("_")[0], key.split("_")[1]
-                episode_dict[f"observation.images.{cam_name}.{img_type}"] = episode_dict[key]
+    for _, step_path in enumerate(step_paths):
+        with open(step_path, "rb") as f:
+            step_data = pickle.load(f)
 
-                # drop the original key
-                episode_dict.pop(key)
+        frame = to_lerobot_frame(step_data)
+        dataset.add_frame(frame, task=task_name)
 
-      
-        # convert to the desired formats
-        for key in episode_dict:
-            if "rgb" in key or "depth" in key:
-                # convert to uint8
-                episode_dict[key] = [x.astype("uint8") for x in episode_dict[key]]
-                if "depth" in key:
-                    episode_dict[key] = [x[..., 0] for x in episode_dict[key]]
+    dataset.save_episode()
+    # del step_data, frame
+    # torch.cuda.empty_cache()
 
-                # resize image
-                def resize(np_array):
-                    img = PILImage.fromarray(np_array)
-                    img = img.resize((256,256), PILImage.Resampling.BICUBIC)
-                    img = np.array(img)
-                    return img 
-                episode_dict[key] = [resize(x) for x in episode_dict[key]]
-
-                if video:
-                    # save png images in temporary directory
-                    tmp_imgs_dir = out_dir / "tmp_images"
-                    save_images_concurrently(episode_dict[key], tmp_imgs_dir)
-                    # encode images to a mp4 video
-                    fname = f"{key}_episode_{episode_idx:06d}.mp4"
-                    video_path = out_dir /  fname
-                    encode_video_frames(tmp_imgs_dir, video_path, fps, vcodec="h264", overwrite=True)
-
-                    # clean temporary images directory
-                    shutil.rmtree(tmp_imgs_dir)
-
-                    # store the reference to the video frame
-                    episode_dict[key] = [
-                        {"path": f"videos/{fname}", "timestamp": i / fps}
-                        for i in range(len(episode_dict[key]))
-                    ]
-
-                else:
-                    episode_dict[key] = [PILImage.fromarray(x) for x in episode_dict[key]]
-
-            else:
-                episode_dict[key] = torch.tensor(np.asarray(episode_dict[key]))
-
-        episode_dicts.append(episode_dict)
-        # state = joint_positions + gripper_position
-        episode_dict["observation.state"] = torch.cat(
-            [episode_dict["joint_positions"],
-             # episode_dict["fingertips"],
-             # episode_dict["accelerometer"].unsqueeze(1),
-              ]
-,
-                dim=1
-        )
-
-        episode_dict.pop("joint_positions")
-        episode_dict.pop("gripper_position")
-
-        # for now, drop all depth images
-        # for key in list(episode_dict.keys()):
-        #     if "depth" in key:
-        #         episode_dict.pop(key)
-
-        # remove unused data 
-        # episode_dict.pop("mic_frame")
-        # episode_dict.pop("switches")
-        # episode_dict.pop("wrench")
-
-        if debug:
-            break
-
-    data_dict = concatenate_episodes(episode_dicts)
-    return data_dict, episode_data_index
-
-
-def to_hf_dataset(data_dict, video):
-    features = {}
-
-    keys = [key for key in data_dict if "observation.images." in key]
-    for key in keys:
-        if video:
-            features[key] = VideoFrame()
-        else:
-            features[key] = Image()
-
-    features["observation.state"] = Sequence(
-        length=data_dict["observation.state"].shape[1], feature=Value(dtype="float32", id=None)
-    )
-    features["action"] = Sequence(
-        length=data_dict["action"].shape[1], feature=Value(dtype="float32", id=None)
-    )
-    features["episode_index"] = Value(dtype="int64", id=None)
-    features["frame_index"] = Value(dtype="int64", id=None)
-    features["timestamp"] = Value(dtype="float32", id=None)
-    features["next.done"] = Value(dtype="bool", id=None)
-    features["index"] = Value(dtype="int64", id=None)
-    # features["next.success"] = Value(dtype="bool", id=None)
-
-    features["observation.ee_pose"] = Sequence(
-        length=data_dict["observation.ee_pose"].shape[1], feature=Value(dtype="float32", id=None)
-    )
-    features["observation.joint_vel"] = Sequence(
-        length=data_dict["observation.joint_vel"].shape[1], feature=Value(dtype="float32", id=None)
-    )
-    # features["wrench"] = Sequence(Value(dtype="float32", id=None), length=6)
-    # features["fingertips"] = Sequence(Value(dtype="float32", id=None), length=32)
-    # features["accelerometer"] = Value(dtype="float32", id=None)
-
-
-    # check if all keys in data dict are in feature dict
-
-    for key in data_dict.keys():
-        if key not in features.keys():
-            print(f"key {key} was not found in HF Dataset feature list")
-
-    for key in features.keys():
-        if key not in data_dict.keys():
-            print(f"key {key} in the HF dataset features was not found in the episode dict ")
-
-    hf_dataset = Dataset.from_dict(data_dict, features=Features(features))
-    hf_dataset.set_transform(hf_transform_to_torch)
-    row = hf_dataset[0]
-    for k, v in row.items():
-        print(k, type(v), v if isinstance(v, (int, float, str)) else f"[{type(v)}]")
-    return hf_dataset
-
-
-def from_raw_to_lerobot_format(raw_dir: Path, out_dir: Path, fps=None, video=True, debug=False):
-    if fps is None:
-        fps = 10
-
-    data_dict, episode_data_index = load_from_raw(raw_dir, out_dir, fps, video, debug)
-    print("Loaded gello dataset into memory")
-    hf_dataset = to_hf_dataset(data_dict, video)
-    print("Converted dataset to Huggingface format")
-    episode_data_index = calculate_episode_data_index(hf_dataset)
-
-    info = {
-        "fps": fps,
-        "video": video,
-    }
-
-    if video:
-        info["encoding"] = get_default_encoding()
-
-    return hf_dataset, episode_data_index, info
-
-if __name__ == "__main__":
-    repo_name = "ur5e_gello_cube_v1"
-    task_name = "pick and place black cube into white bowl"
-    gello_dir = Path.home() / Path("dev/gello_software/data/gello")
-    videos_dir = Path.home() / Path("dev/gello_software/data/videos/ur5e_gello_cube_v1")
-    fps = 30
-
-    hf_dataset_path = gello_dir / "tmp_data.pkl"
-    if hf_dataset_path.exists():
-        print("Loading hf_dataset from pickle file")
-        with open(hf_dataset_path, "rb") as inp:
-            hf_dataset, episode_data_index, info = pickle.load(inp)
-    else:
-        print("Converting raw data to lerobot format")
-        hf_dataset, episode_data_index, info = from_raw_to_lerobot_format(gello_dir, videos_dir, fps=fps, video=False)
-
-        # Save a tmp of hf_dataset to pickle file
-        with open(gello_dir / "tmp_data.pkl", "wb") as outp:
-            pickle.dump((hf_dataset, episode_data_index, info), outp, pickle.HIGHEST_PROTOCOL)
-
-    dataset_path = Path.home() / ".cache/huggingface/lerobot/" / repo_name
+def convert_to_lerobot(raw_dir, repo_name, task_name, fps=30):
+    dataset_path = Path.home() / ".cache/huggingface/lerobot" / repo_name
     if dataset_path.exists():
         print(f"Deleting existing dataset folder: {dataset_path}")
         shutil.rmtree(dataset_path)
-    
-    print(hf_dataset)
 
-    # Create dataset instance
-    print("\nCreating dataset...")
     dataset = LeRobotDataset.create(
         repo_id=repo_name,
         fps=fps,
         features=GELLO_FEATURES,
-        tolerance_s=0.03,
-        use_videos=True,
+        image_writer_threads=10,
+        image_writer_processes=5,
     )
 
-    print("Camera keys:", dataset.meta.camera_keys)
-    episodes = range(len(episode_data_index["from"]))
-    for ep_idx in episodes:
-        from_idx = episode_data_index["from"][ep_idx].item()
-        to_idx = episode_data_index["to"][ep_idx].item()
-        num_frames = int(to_idx - from_idx)
+    episode_paths = sorted([x for x in Path(raw_dir).glob("*") if x.is_dir()])
 
-        # Load all video frames for this episode at once
-        # video_paths = sorted(videos_dir.glob(f"*_episode_{ep_idx:06d}.mp4"))  # Adjust this if you have multiple video files
-        # video_frames_batch_dict = {}
-        # for video_path in video_paths:
-        #     video_frames_batch_dict[video_path] = load_video_frames_batch(video_path, num_frames)
+    assert len(episode_paths) > 0, "No episode directories found in GELLO dataset"
 
-        for frame_idx in range(num_frames):
-            i = int(from_idx + frame_idx)
-            frame_data = hf_dataset[i]
+    for ep_path in tqdm.tqdm(episode_paths, desc="Processing episodes"):
+        process_episode(ep_path, dataset, fps, task_name)
 
-            frame = {
-                key: frame_data[key].numpy().astype(np.float32)
-                for key in [
-                    "observation.state",
-                    "observation.joint_vel",
-                    "observation.ee_pose",
-                    "action"
-                ]
-            }
-            # for key in video_frames_batch_dict.keys():
-            #     video_frames_batch = video_frames_batch_dict[key]
-            #     clamped_idx = min(frame_idx, len(video_frames_batch)-1)
-            #     if "base" in key and "depth" in key:
-            #         frame["observation.images.base.depth"] = video_frames_batch[clamped_idx]
-            #     elif "base" in key and "rgb" in key:
-            #         frame["observation.images.base.rgb"] = video_frames_batch[clamped_idx]
-            #     elif "wrist" in key and "depth" in key:
-            #         frame["observation.images.wrist.depth"] = video_frames_batch[clamped_idx]
-            #     elif "wrist" in key and "rgb" in key:
-            #         frame["observation.images.wrist.rgb"] = video_frames_batch[clamped_idx]
-            #     else:
-            #         raise ValueError()
-
-            # frame["timestamp"] = frame_data["timestamp"]
-            frame["observation.images.wrist.rgb"] = to_channels_last(frame_data["observation.images.wrist.rgb"])
-            frame["observation.images.wrist.depth"] = depth_to_rgb(to_channels_last(frame_data["observation.images.wrist.depth"]))
-            frame["observation.images.base.rgb"] = to_channels_last(frame_data["observation.images.base.rgb"])
-            frame["observation.images.base.depth"] = depth_to_rgb(to_channels_last(frame_data["observation.images.base.depth"]))
-
-
-            dataset.add_frame(frame, task=task_name)
-
-        dataset.save_episode()
-
+    print("Conversion complete!")
     ds_meta = LeRobotDatasetMetadata(repo_name)
-
-    # By instantiating just this class, you can quickly access useful information about the content and the
-    # structure of the dataset without downloading the actual data yet (only metadata files — which are
-    # lightweight).
-    print(f"Total number of episodes: {ds_meta.total_episodes}")
-    print(f"Average number of frames per episode: {ds_meta.total_frames / ds_meta.total_episodes:.3f}")
-    print(f"Frames per second used during data collection: {ds_meta.fps}")
-    print(f"Robot type: {ds_meta.robot_type}")
-    print(f"keys to access images from cameras: {ds_meta.camera_keys=}\n")
-
-    print("Tasks:")
-    print(ds_meta.tasks)
-    print("Features:")
-    print(ds_meta.features)
-
-    # You can also get a short summary by simply printing the object:
     print(ds_meta)
 
-    print(f"Deleting tmp hf_dataset file: {hf_dataset_path}")
-    os.remove(hf_dataset_path)
+if __name__ == "__main__":
+    import argparse
 
+    parser = argparse.ArgumentParser(
+        prog='gello_to_lerobot',
+        description='Converts the pickle files that were generated by the GELLO tele-operation process to an equilavent LeRobot dataset.'
+    )
+    parser.add_argument("-i", "--input", required=True, help="The directory that holds all the pickle files. This should be the root directory that contains all episodes (each episode is contained in its own directory).")
+    parser.add_argument("-n", "--name", required=True, help="The name of the LeRobot output dataset")
+    parser.add_argument("-t", '--task', required=True, help="The task that describes what was done over all episodes (assumes a single task).")
+    parser.add_argument("-f", "--fps", default=30, help="The data recording rate in frames per second. This is the rate at which observations were recorded, i.e. in this case the rate of the camera capture")
+    
+    args = parser.parse_args()
 
+    convert_to_lerobot(args.input, args.name, args.task, args.fps)
