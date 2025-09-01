@@ -117,4 +117,4 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    convert_to_lerobot(args.input, args.name, args.task, args.fps)
+    convert_to_lerobot(args.input, args.name, args.task, int(args.fps))
