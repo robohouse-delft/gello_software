@@ -9,13 +9,13 @@ from gello.robots.robot import Robot
 
 class Rate:
     def __init__(self, rate: float):
-        self.last = time.time()
+        self.last = time.perf_counter()
         self.rate = rate
 
     def sleep(self) -> None:
-        while self.last + 1.0 / self.rate > time.time():
+        while self.last + 1.0 / self.rate > time.perf_counter():
             time.sleep(0.0001)
-        self.last = time.time()
+        self.last = time.perf_counter()
 
 
 class RobotEnv:
@@ -36,6 +36,11 @@ class RobotEnv:
             robot: the robot object.
         """
         return self._robot
+
+    def close(self):
+        self._robot.stop()
+        for name, camera in self._camera_dict.items():
+            camera.stop()
 
     def __len__(self):
         return 0

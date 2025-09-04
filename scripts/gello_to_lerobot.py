@@ -11,14 +11,17 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetad
 
 # ---------- CONFIG ----------
 GELLO_FEATURES = {
-    "observation.state": {"dtype": "float32", "shape": (7,), "names": ["joint_positions"]},
+    "observation.state": {"dtype": "float32", "shape": (7,), "names": ["joint_0", "joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "gripper"]},
+    # "observation.state": {"dtype": "float32", "shape": (7,), "names": ["joint_positions"]},
     # "observation.joint_vel": {"dtype": "float32", "shape": (7,), "names": ["joint_velocities"]},
-    # "observation.ee_pose": {"dtype": "float32", "shape": (7,), "names": ["ee_pos_quat"]},
+    # "observation.state": {"dtype": "float32", "shape": (8,), "names": ["x", "y", "z", "q_x", "q_y", "q_z", "q_w", "gripper"]},
     "observation.images.wrist.rgb": {"dtype": "video", "shape": (480, 640, 3), "names": ["height", "width", "channel"]},
     # "observation.images.wrist.depth": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
     "observation.images.base.rgb": {"dtype": "video", "shape": (480, 640, 3), "names": ["height", "width", "channel"]},
     # "observation.images.base.depth": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
-    "action": {"dtype": "float32", "shape": (7,), "names": ["joint_commands"]},
+    # "action": {"dtype": "float32", "shape": (7,), "names": ["joint_commands"]},
+    "action": {"dtype": "float32", "shape": (7,), "names": ["joint_0", "joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "gripper"]},
+    # "action": {"dtype": "float32", "shape": (8,), "names": ["x", "y", "z", "q_x", "q_y", "q_z", "q_w", "gripper"]},
 }
 
 def depth_to_rgb(depth_img):
@@ -43,7 +46,7 @@ def to_lerobot_frame(step_data: Dict) -> Dict:
     frame = {}
     frame["observation.state"] = step_data["joint_positions"].astype(np.float32)
     # frame["observation.joint_vel"] = step_data["joint_velocities"].astype(np.float32)
-    # frame["observation.ee_pose"] = step_data["ee_pos_quat"].astype(np.float32)
+    # frame["observation.state"] = step_data["ee_pos_quat"].astype(np.float32) + step_data["joint_positions"].astype(np.float32)[-1]
     frame["action"] = step_data["control"].astype(np.float32)
 
     # Handle images

@@ -1,5 +1,6 @@
 import os
 import time
+import threading
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -46,6 +47,18 @@ class RealSenseCamera(CameraDriver):
         config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
         self._pipeline.start(config)
         self._flip = flip
+        self._lock = threading.Lock()
+        self._read_thread = threading.Thread(target=self._read_frames, daemon=True)
+        self._read_thread.start()
+    
+    def _read_frames(self):
+        while True:
+            frames = self._pipeline.wait_for_frames()
+            if frames:
+                with self._lock:
+                    self._latest_color_frame = frames.get_color_frame()
+                    self._latest_depth_frame = frames.get_depth_frame()
+            time.sleep(0.01)
 
     def read(
         self,
@@ -63,12 +76,21 @@ class RealSenseCamera(CameraDriver):
         """
         import cv2
 
-        frames = self._pipeline.wait_for_frames()
-        color_frame = frames.get_color_frame()
-        color_image = np.asanyarray(color_frame.get_data())
-        depth_frame = frames.get_depth_frame()
-        depth_image = np.asanyarray(depth_frame.get_data())
+        # frames = self._pipeline.wait_for_frames()
+        # color_frame = frames.get_color_frame()
+        # color_image = np.asanyarray(color_frame.get_data())
+        # depth_frame = frames.get_depth_frame()
+        # depth_image = np.asanyarray(depth_frame.get_data())
         # depth_image = cv2.convertScaleAbs(depth_image, alpha=0.03)
+        with self._lock:
+            color_frame = self._latest_color_frame
+            depth_frame = self._latest_depth_frame
+        
+        if color_frame is None or depth_frame is None:
+            return np.zeros((480, 640, 3), dtype=np.uint8), np.zeros((480, 640, 1), dtype=np.uint16)
+
+        color_image = np.asanyarray(color_frame.get_data())
+        depth_image = np.asanyarray(depth_frame.get_data())
         if img_size is None:
             image = color_image[:, :, ::-1]
             depth = depth_image

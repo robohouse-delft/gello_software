@@ -14,6 +14,10 @@ class Agent(Protocol):
             action: action to take on the environment.
         """
         raise NotImplementedError
+    
+    def stop(self):
+        """Placeholder for stop functionality."""
+        pass
 
 
 class DummyAgent(Agent):

@@ -72,6 +72,10 @@ class ZMQClientRobot(Robot):
         self._context = zmq.Context()
         self._socket = self._context.socket(zmq.REQ)
         self._socket.connect(f"tcp://{host}:{port}")
+    
+    def stop(self):
+        """Close connection to the ZMQ robot server"""
+        self._socket.close()
 
     def num_dofs(self) -> int:
         """Get the number of joints in the robot.

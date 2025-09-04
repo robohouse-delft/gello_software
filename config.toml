@@ -1,18 +1,19 @@
 [env]
-agent = "lerobot_policy"
+agent = "gello"
 robot_port = 6001
 wrist_camera_port = 5000
 base_camera_port = 5001
 hostname = "127.0.0.1"
-freq_hz = 30
+freq_hz = 10
 joint_ids=[1, 2, 3, 4, 5, 6]
-start_joints_deg = [0.0, -90.0, -90.0, -90.0, 90.0, 0.0]
+start_joints_deg = [0.0, -90.0, -90.0, -90.0, 90.0, -180.0]
 joint_signs = [1.0, 1.0, -1.0, 1.0, 1.0, 1.0]
 # joint_offsets=[3.142, 3.142, 4.712, 7.854, 3.142, -1.571]
-joint_offsets = [6.283, 3.142, 4.712, 1.571, 3.142, 6.283]
-gripper_config=[7, 194, 152]
+# '0.000', '3.142', '-1.571', '1.571', '3.142', '6.283'
+joint_offsets = [0.0, 3.142, -1.571, 1.571, 3.142, 6.283]
+gripper_config=[7, 195, 153]
 mock = false
-use_save_interface = false
+use_save_interface = true
 data_dir = "./data"
 bimanual = false
 verbose = false
@@ -27,7 +28,7 @@ gripper_hostname = "/dev/ttyACM0" # Either hostname/ip address/serial port, depe
 gripper_port = 115200 # Either port number of baud rate
 x_limits_m = [-1.0, 1.0]
 y_limits_m = [-0.4, 0.6]
-z_limits_m = [0.05, 1.5]
+z_limits_m = [0.03, 1.5]
 
 [camera_server]
 hostname = "127.0.0.1"
@@ -41,8 +42,9 @@ source_dir = "./data"
 vis = true
 
 [lerobot]
-policy = "diffusion" # act, diffusion, smolvla
-dataset_url = "ur5e_gello_cube_v3"
+policy = "act" # act, diffusion, smolvla
+dataset_type="lerobot" # gello, lerobot
+dataset_url = "ur5e_gello_cube_v7"
 episode_idx = 0
-checkpoint_path = "/home/zico/dev/gello_software/outputs/train/diffusion_ur5e_gello_cube_v3/100000/pretrained_model"
-task = "pick and place black cube into white bowl"
+checkpoint_path = "/home/zico/dev/gello_software/outputs/train/act_ur5e_gello_cube_v5/checkpoints/300000/pretrained_model"
+task = "pick red cube and place on yellow card"

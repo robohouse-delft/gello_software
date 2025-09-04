@@ -17,6 +17,10 @@ class ZMQClientCamera(CameraDriver):
         self._context = zmq.Context()
         self._socket = self._context.socket(zmq.REQ)
         self._socket.connect(f"tcp://{host}:{port}")
+    
+    def stop(self):
+        """Close connection to the ZMQ camera server"""
+        self._socket.close()
 
     def read(
         self,

@@ -1,4 +1,5 @@
 from pathlib import Path
+from abc import abstractmethod
 from typing import Optional, Protocol, Tuple
 
 import numpy as np
@@ -24,6 +25,11 @@ class CameraDriver(Protocol):
             np.ndarray: The color image.
             np.ndarray: The depth image.
         """
+    
+    def stop(self):
+        """Stop the processing"""
+        pass
+
 
 
 class DummyCamera(CameraDriver):

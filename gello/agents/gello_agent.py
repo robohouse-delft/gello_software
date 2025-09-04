@@ -135,6 +135,9 @@ class GelloAgent(Agent):
             gripper_config=gripper_config,
             start_joints=start_joints,
         )
+    
+    def stop(self):
+        self._robot.stop()
 
     def act(self, obs: Dict[str, np.ndarray]) -> np.ndarray:
         return self._robot.get_joint_state()

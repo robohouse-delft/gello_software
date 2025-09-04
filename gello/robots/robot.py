@@ -9,6 +9,10 @@ class Robot(Protocol):
 
     A protocol for a robot that can be controlled.
     """
+    
+    def stop(self):
+        """Close connection to robot (if supported)"""
+        pass
 
     @abstractmethod
     def num_dofs(self) -> int:

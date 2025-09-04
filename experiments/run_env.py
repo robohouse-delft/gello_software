@@ -1,22 +1,19 @@
-import datetime
 import glob
 import time
-from time import perf_counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
 
 import numpy as np
 import toml
-# import tyro
 
 from gello.agents.agent import BimanualAgent, DummyAgent
 from gello.agents.gello_agent import GelloAgent
-from gello.data_utils.format_obs import save_frame
-from gello.env import RobotEnv
+from gello.env import RobotEnv, Rate
 from gello.robots.robot import PrintRobot
 from gello.zmq_core.robot_node import ZMQClientRobot
 from gello.zmq_core.camera_node import ZMQClientCamera
+from gello.data_utils.format_obs import LeRobotDatasetRecorder, GelloDatasetRecorder
 
 
 def print_color(*args, color=None, attrs=(), **kwargs):
@@ -59,7 +56,7 @@ def main(config):
             "base": ZMQClientCamera(port=env_config["base_camera_port"], host=config["camera_server"]["hostname"]),
         }
         robot_client = ZMQClientRobot(port=env_config["robot_port"], host=env_config["hostname"])
-    env = RobotEnv(robot_client, control_rate_hz=env_config["freq_hz"], camera_dict=camera_clients)
+    env = RobotEnv(robot_client, control_rate_hz=125, camera_dict=camera_clients)
 
     if env_config["bimanual"]:
         if env_config["agent"] == "gello":
@@ -246,57 +243,57 @@ def main(config):
                 )
             exit()
 
-    if env_config["use_save_interface"]:
-        from gello.data_utils.keyboard_interface import KBReset
-        # from gello.data_utils.format_obs import LeRobotDatasetRecorder
+    # Recording datasets
+    if config["lerobot"]["dataset_type"] == "gello":
+        recorder = GelloDatasetRecorder((Path(env_config["data_dir"]).expanduser() / config["lerobot"]["dataset_url"]).as_posix(), env_config["freq_hz"])
+    else:
+        recorder = LeRobotDatasetRecorder(config["lerobot"]["dataset_url"], env_config["freq_hz"])
 
-        kb_interface = KBReset()
-        # lerobot_recorder = LeRobotDatasetRecorder(config["lerobot"]["dataset_url"], env_config["freq_hz"])
 
     print_color("\nStart 🚀🚀🚀", color="green", attrs=("bold",))
 
-    save_path = None
-    prev_state = None
-    start_time = time.time()
-    loop_delay_s = 1
+    recording_start_timestamp = time.perf_counter()
+    loop_rate_hz = Rate(env_config["freq_hz"])
+    # prev_timestamp = 0
+    recording = False
+    obs_timestamp = 0
     while True:
-        num = time.time() - start_time
-        message = f"\rTime passed (rate: {round(1 / loop_delay_s, 0)} Hz): {round(num, 2)}          "
-        print_color(
-            message,
-            color="white",
-            attrs=("bold",),
-            end="",
-            flush=True,
-        )
-        loop_start_s = perf_counter()
+        # Act and observe
+        # prev_timestamp = obs_timestamp
+        obs_timestamp = time.perf_counter()
+        # print(f"loop dt: {obs_timestamp - prev_timestamp}")
         action = agent.act(obs)
-        dt = datetime.datetime.now()
-        if env_config["use_save_interface"]:
-            state = kb_interface.update()
-            if state == "start":
-                dt_time = datetime.datetime.now()
-                save_path = (
-                    Path(env_config["data_dir"]).expanduser()
-                    / env_config["agent"]
-                    / dt_time.strftime("%m%d_%H%M%S")
-                )
-                save_path.mkdir(parents=True, exist_ok=True)
-                print(f"Saving to {save_path}")
-            elif state == "save":
-                assert save_path is not None, "something went wrong"
-                save_frame(save_path, dt, obs, action)
-                # lerobot_recorder.add_frame("test", dt, obs, action)
-            elif state == "normal":
-                save_path = None
-                # if prev_state == "save":
-                    # lerobot_recorder.save_episode()
-            else:
-                raise ValueError(f"Invalid state {state}")
-            prev_state = state
         obs = env.step(action)
-        loop_delay_s = perf_counter() - loop_start_s
+        if recorder is not None:
+            if recorder.check_event("start_recording"):
+                print("Start episode recording")
+                recording_start_timestamp = time.perf_counter()
+                recording = True
+                recorder.start()
+            elif recorder.check_event("stop_recording"):
+                print("Saving episode...", end="")
+                recorder.save_episode()
+                print("done")
+            elif recorder.check_event("discard_recording"):
+                print("Discard recording")
+                recorder.discard_episode()
+            elif recorder.check_event("quit"):
+                print("Quit loop!")
+                break
+            if recording:
+                timestamp = obs_timestamp - recording_start_timestamp
+                recorder.add_frame(config["lerobot"]["task"], timestamp, obs, action)
+            recorder.clear_events()
+        # Sleep to control the loop rate
+        loop_rate_hz.sleep()
+    
+    # Close the environment
+    agent.stop()
+    env.close()
+    if recorder is not None:
+        recorder.close()
 
+    print("Program end!")
 
 if __name__ == "__main__":
     config = toml.load("./config.toml")
