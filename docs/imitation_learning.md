@@ -14,7 +14,6 @@ The GELLO tele-operation device has been adopted to perform imitation learning o
 - Run `experiments/launch_camera_nodes.py` and `experiments/launch_nodes.py`, each in a separate process.
 - The config should have the following set during dataset recording:
     - `agent = "gello"`
-    - `use_save_interface = true`
     - you can also choose your output directory using `data_dir` option.
 - Load `teleop` program on the UR5e.
 - Run the program on the UR5e which will run the external control application which will connect to the host using RTDE interface.
@@ -31,7 +30,6 @@ The GELLO tele-operation device has been adopted to perform imitation learning o
 
 - Running inference on the actual robot is very similar to the process of recording the dataset. The same sequence of actions should be followed, however, the following config parameters need to be set accordingly:
     - `agent = "lerobot_policy`
-    - `use_save_interface = false`
     - `policy = <model_type>`
     - `checkpoint_path = <path_to_checkpoint>`
     - `task = <task_description>` This should be the same as the task description when generating the dataset. It is only important for the VLM based models, like `SmolVLA`.

@@ -13,10 +13,10 @@ joint_signs = [1.0, 1.0, -1.0, 1.0, 1.0, 1.0]
 joint_offsets = [0.0, 3.142, -1.571, 1.571, 3.142, 6.283]
 gripper_config=[7, 195, 153]
 mock = false
-use_save_interface = true
 data_dir = "./data"
 bimanual = false
 verbose = false
+display_data = true
 
 [robot]
 type = "ur"

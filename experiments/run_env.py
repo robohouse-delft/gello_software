@@ -13,7 +13,8 @@ from gello.env import RobotEnv, Rate
 from gello.robots.robot import PrintRobot
 from gello.zmq_core.robot_node import ZMQClientRobot
 from gello.zmq_core.camera_node import ZMQClientCamera
-from gello.data_utils.format_obs import LeRobotDatasetRecorder, GelloDatasetRecorder
+from gello.data_utils.format_obs import DataController, LeRobotDatasetRecorder, GelloDatasetRecorder
+from lerobot.utils.visualization_utils import _init_rerun, log_rerun_data
 
 
 def print_color(*args, color=None, attrs=(), **kwargs):
@@ -57,6 +58,9 @@ def main(config):
         }
         robot_client = ZMQClientRobot(port=env_config["robot_port"], host=env_config["hostname"])
     env = RobotEnv(robot_client, control_rate_hz=125, camera_dict=camera_clients)
+
+    if env_config["display_data"]:
+        _init_rerun(("recording" if env_config["agent"] == "gello" else "inference"))
 
     if env_config["bimanual"]:
         if env_config["agent"] == "gello":
@@ -188,6 +192,7 @@ def main(config):
             raise ValueError("Invalid agent name")
 
     # going to start position
+    recorder = DataController()
     obs = env.get_obs()
     if env_config["agent"] == "gello":
         print("Going to start position")
@@ -243,11 +248,11 @@ def main(config):
                 )
             exit()
 
-    # Recording datasets
-    if config["lerobot"]["dataset_type"] == "gello":
-        recorder = GelloDatasetRecorder((Path(env_config["data_dir"]).expanduser() / config["lerobot"]["dataset_url"]).as_posix(), env_config["freq_hz"])
-    else:
-        recorder = LeRobotDatasetRecorder(config["lerobot"]["dataset_url"], env_config["freq_hz"])
+        # Recording datasets
+        if config["lerobot"]["dataset_type"] == "gello":
+            recorder = GelloDatasetRecorder((Path(env_config["data_dir"]).expanduser() / config["lerobot"]["dataset_url"]).as_posix(), env_config["freq_hz"])
+        else:
+            recorder = LeRobotDatasetRecorder(config["lerobot"]["dataset_url"], env_config["freq_hz"])
 
 
     print_color("\nStart 🚀🚀🚀", color="green", attrs=("bold",))
@@ -264,26 +269,28 @@ def main(config):
         # print(f"loop dt: {obs_timestamp - prev_timestamp}")
         action = agent.act(obs)
         obs = env.step(action)
-        if recorder is not None:
-            if recorder.check_event("start_recording"):
-                print("Start episode recording")
-                recording_start_timestamp = time.perf_counter()
-                recording = True
-                recorder.start()
-            elif recorder.check_event("stop_recording"):
-                print("Saving episode...", end="")
-                recorder.save_episode()
-                print("done")
-            elif recorder.check_event("discard_recording"):
-                print("Discard recording")
-                recorder.discard_episode()
-            elif recorder.check_event("quit"):
-                print("Quit loop!")
-                break
-            if recording:
-                timestamp = obs_timestamp - recording_start_timestamp
-                recorder.add_frame(config["lerobot"]["task"], timestamp, obs, action)
-            recorder.clear_events()
+        # Check events from user keyboard and act appropriately
+        if recorder.check_event("start_recording"):
+            print("Start episode recording")
+            recording_start_timestamp = time.perf_counter()
+            recording = True
+            recorder.start()
+        elif recorder.check_event("stop_recording"):
+            print("Saving episode...", end="")
+            recorder.save_episode()
+            print("done")
+        elif recorder.check_event("discard_recording"):
+            print("Discard recording")
+            recorder.discard_episode()
+        elif recorder.check_event("quit"):
+            print("Quit loop!")
+            break
+        if recording:
+            timestamp = obs_timestamp - recording_start_timestamp
+            recorder.add_frame(config["lerobot"]["task"], timestamp, obs, action)
+        if env_config["display_data"]:
+            log_rerun_data(obs, dict(np.ndenumerate(action)))
+        recorder.clear_events()
         # Sleep to control the loop rate
         loop_rate_hz.sleep()
     

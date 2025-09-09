@@ -1,7 +1,7 @@
 import datetime
 import pickle
 from pathlib import Path
-from typing import Dict, Protocol
+from typing import Dict
 from abc import abstractmethod
 
 import numpy as np
@@ -54,7 +54,7 @@ def to_lerobot_frame(step_data: Dict) -> Dict:
     return frame
 
 
-class DatasetRecorder:
+class DataController:
     def __init__(self):
         self.keyboard_listener, self.keyboard_events = init_keyboard_listener()
 
@@ -107,7 +107,7 @@ def save_frame(
     with open(recorded_file, "wb") as f:
         pickle.dump(obs, f)
 
-class GelloDatasetRecorder(DatasetRecorder):
+class GelloDatasetRecorder(DataController):
     def __init__(self, repo_name: str, fps: int):
         super().__init__()
         self.root_dir = Path(repo_name)
@@ -140,7 +140,7 @@ class GelloDatasetRecorder(DatasetRecorder):
     def save_episode(self) -> None:
         self.out_dir = None
 
-class LeRobotDatasetRecorder(DatasetRecorder):
+class LeRobotDatasetRecorder(DataController):
     def __init__(self, repo_name: str, fps: int):
         super().__init__()
         dataset_path = Path.home() / ".cache/huggingface/lerobot" / repo_name
