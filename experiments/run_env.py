@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 import numpy as np
 import toml
 
+import rerun as rr
 from gello.agents.agent import BimanualAgent, DummyAgent
 from gello.agents.gello_agent import GelloAgent
 from gello.env import RobotEnv, Rate
@@ -299,6 +300,7 @@ def main(config):
     env.close()
     if recorder is not None:
         recorder.close()
+        rr.disconnect()
 
     print("Program end!")
 
