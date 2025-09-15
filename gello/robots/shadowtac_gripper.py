@@ -30,11 +30,11 @@ class CommandInterface:
     def close(self):
         self.serial_port.close()
 
-    def send_command(self, cmd: CommandID, data: bytes):
+    def send(self, cmd: CommandID, data: bytes):
         packet = struct.pack("<BB", cmd.value, len(data)) + data
         self.serial_port.write(packet)
 
-    def receive_command(self, cmd: CommandID) -> bytes | None:
+    def get_latest(self, cmd: CommandID) -> bytes | None:
         data = None
         with self.lock:
             # Read and remove the latest data from the store
@@ -92,7 +92,7 @@ class ShadowtacGripper:
         try:
             self.command_interface = CommandInterface(port, baud_rate=baud_rate, timeout_s=timeout_s)
             # Ensure that we are in a known state at start.
-            self.command_interface.send_command(CommandID.CMD_GRIPPER_POSITION, struct.pack("<f", float(self._min_position_mm)))
+            self.command_interface.send(CommandID.CMD_GRIPPER_POSITION, struct.pack("<f", float(self._min_position_mm)))
         except serial.SerialException as e:
             sys.exit(e) # type: ignore
 
@@ -164,14 +164,14 @@ class ShadowtacGripper:
         if self.command_interface is not None:
             if self.last_position != clip_pos:
                 clip_pos_mm = ((self._max_position_mm - self._min_position_mm) / (self._max_position - self._min_position)) * clip_pos + self._min_position_mm
-                self.command_interface.send_command(CommandID.CMD_GRIPPER_POSITION, struct.pack("<f", float(clip_pos_mm)))
+                self.command_interface.send(CommandID.CMD_GRIPPER_POSITION, struct.pack("<f", float(clip_pos_mm)))
                 success = True
             
         return success, clip_pos
     
     def _get_gripper_position(self) -> Optional[float]:
         if self.command_interface is not None:
-            data = self.command_interface.receive_command(CommandID.CMD_GRIPPER_POSITION)
+            data = self.command_interface.get_latest(CommandID.CMD_GRIPPER_POSITION)
             if data is not None:
                 position_mm = struct.unpack("<f", data)[0]
                 return position_mm
