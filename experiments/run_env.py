@@ -6,6 +6,7 @@ from typing import Optional, Tuple
 
 import numpy as np
 import toml
+import tyro
 
 import rerun as rr
 from gello.agents.agent import BimanualAgent, DummyAgent
@@ -29,49 +30,38 @@ def print_color(*args, color=None, attrs=(), **kwargs):
 @dataclass
 class Args:
     agent: str = "none"
-    robot_port: int = 6001
-    wrist_camera_port: int = 5000
-    base_camera_port: int = 5001
-    hostname: str = "127.0.0.1"
-    robot_type: str = None  # only needed for quest agent or spacemouse agent
-    hz: int = 100
-    start_joints: Optional[Tuple[float, ...]] = None
-    no_gripper: bool = False
-    gello_port: Optional[str] = None
     mock: bool = False
-    use_save_interface: bool = False
-    data_dir: str = "~/bc_data"
-    bimanual: bool = False
+    display_data: bool = False
     verbose: bool = False
 
 
-def main(config):
+def main(config, args):
     env_config = config["env"]
     robot_config = config["robot"]
-    if env_config["mock"]:
+    camera_clients = {}
+    if args.mock:
         robot_client = PrintRobot(8, dont_print=True)
-        camera_clients = {}
     else:
-        camera_clients = {
-            # you can optionally add camera nodes here for imitation learning purposes
-            "wrist": ZMQClientCamera(port=env_config["wrist_camera_port"], host=config["camera_server"]["hostname"]),
-            "base": ZMQClientCamera(port=env_config["base_camera_port"], host=config["camera_server"]["hostname"]),
-        }
+        try:
+            for camera_client in config["camera_clients"]:
+                camera_clients[camera_client["name"]] = ZMQClientCamera(port=camera_client["port"], host=config["camera_server"]["hostname"])
+        except KeyError:
+            print("No cameras added to robot environment!")
         robot_client = ZMQClientRobot(port=env_config["robot_port"], host=env_config["hostname"])
     env = RobotEnv(robot_client, control_rate_hz=125, camera_dict=camera_clients)
 
-    if env_config["display_data"]:
-        _init_rerun(("recording" if env_config["agent"] == "gello" else "inference"))
+    if args.display_data:
+        _init_rerun(("recording" if args.agent == "gello" else "inference"))
 
     if env_config["bimanual"]:
-        if env_config["agent"] == "gello":
+        if args.agent == "gello":
             # dynamixel control box port map (to distinguish left and right gello)
             right = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT7WBG6A-if00-port0"
             left = "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT7WBEIA-if00-port0"
             left_agent = GelloAgent(port=left)
             right_agent = GelloAgent(port=right)
             agent = BimanualAgent(left_agent, right_agent)
-        elif env_config["agent"] == "quest":
+        elif args.agent == "quest":
             from gello.agents.quest_agent import SingleArmQuestAgent
 
             left_agent = SingleArmQuestAgent(robot_type=env_config["robot_type"], which_hand="l")
@@ -80,18 +70,18 @@ def main(config):
             )
             agent = BimanualAgent(left_agent, right_agent)
             # raise NotImplementedError
-        elif env_config["agent"] == "spacemouse":
+        elif args.agent == "spacemouse":
             from gello.agents.spacemouse_agent import SpacemouseAgent
 
             left_path = "/dev/hidraw0"
             right_path = "/dev/hidraw1"
             left_agent = SpacemouseAgent(
-                robot_type=env_config["robot_type"], device_path=left_path, verbose=env_config["verbose"]
+                robot_type=env_config["robot_type"], device_path=left_path, verbose=args.verbose
             )
             right_agent = SpacemouseAgent(
                 robot_type=env_config["robot_type"],
                 device_path=right_path,
-                verbose=env_config["verbose"],
+                verbose=args.verbose,
                 invert_button=True,
             )
             agent = BimanualAgent(left_agent, right_agent)
@@ -118,7 +108,7 @@ def main(config):
         for jnt in np.linspace(curr_joints, reset_joints, steps):
             env.step(jnt)
     else:
-        if env_config["agent"] == "gello":
+        if args.agent == "gello":
             gello_port = None
             usb_ports = glob.glob("/dev/serial/by-id/*")
             print(f"Found {len(usb_ports)} ports")
@@ -160,42 +150,42 @@ def main(config):
                 for jnt in np.linspace(curr_joints, reset_joints, steps):
                     env.step(jnt)
                     time.sleep(0.001)
-        elif env_config["agent"] == "quest":
+        elif args.agent == "quest":
             from gello.agents.quest_agent import SingleArmQuestAgent
 
             agent = SingleArmQuestAgent(robot_type=env_config["robot_type"], which_hand="l")
-        elif env_config["agent"] == "spacemouse":
+        elif args.agent == "spacemouse":
             from gello.agents.spacemouse_agent import SpacemouseAgent
 
-            agent = SpacemouseAgent(robot_type=env_config["robot_type"], verbose=env_config["verbose"])
-        elif env_config["agent"] == "dummy" or env_config["agent"] == "none":
+            agent = SpacemouseAgent(robot_type=env_config["robot_type"], verbose=args.verbose)
+        elif args.agent == "dummy" or args.agent == "none":
             agent = DummyAgent(num_dofs=robot_client.num_dofs())
-        elif env_config["agent"] == "lerobot_replay":
+        elif args.agent == "replay":
             from gello.agents.lerobot_agent import LeRobotReplayAgent
 
-            agent = LeRobotReplayAgent(config["lerobot"]["dataset_url"], episode_idx=config["lerobot"]["episode_idx"])
-        elif env_config["agent"] == "lerobot_policy":
+            agent = LeRobotReplayAgent(config["inference"]["dataset_url"], episode_idx=config["inference"]["episode_idx"])
+        elif args.agent == "policy":
             from gello.agents.lerobot_agent import LeRobotAgent, load_act_policy, load_smolvla_policy, load_diffusion_policy
 
             policy = None
-            match config["lerobot"]["policy"]:
+            match config["inference"]["policy"]:
                 case "act":
-                    policy = load_act_policy(config["lerobot"]["checkpoint_path"])
+                    policy = load_act_policy(config["inference"]["checkpoint_path"])
                 case "smolvla":
-                    policy = load_smolvla_policy(config["lerobot"]["checkpoint_path"])
+                    policy = load_smolvla_policy(config["inference"]["checkpoint_path"])
                 case "diffusion":
-                    policy = load_diffusion_policy(config["lerobot"]["checkpoint_path"])
+                    policy = load_diffusion_policy(config["inference"]["checkpoint_path"])
                 case _:
                     raise ValueError("Invalid policy name")
                 
-            agent = LeRobotAgent(policy, config["lerobot"]["task"])
+            agent = LeRobotAgent(policy, config["inference"]["task"])
         else:
             raise ValueError("Invalid agent name")
 
     # going to start position
     recorder = DataController()
     obs = env.get_obs()
-    if env_config["agent"] == "gello":
+    if args.agent == "gello":
         print("Going to start position")
         start_pos = np.asarray(agent.act(env.get_obs()))
         joints = obs["joint_positions"]
@@ -250,7 +240,7 @@ def main(config):
             exit()
 
         # Recording datasets
-        if config["lerobot"]["dataset_type"] == "gello":
+        if env_config["dataset_type"] == "gello":
             recorder = GelloDatasetRecorder((Path(env_config["data_dir"]).expanduser() / config["lerobot"]["dataset_url"]).as_posix(), env_config["freq_hz"])
         else:
             recorder = LeRobotDatasetRecorder(config["lerobot"]["dataset_url"], env_config["freq_hz"])
@@ -289,7 +279,7 @@ def main(config):
         if recording:
             timestamp = obs_timestamp - recording_start_timestamp
             recorder.add_frame(config["lerobot"]["task"], timestamp, obs, action)
-        if env_config["display_data"]:
+        if args.display_data:
             log_rerun_data(obs, dict(np.ndenumerate(action)))
         recorder.clear_events()
         # Sleep to control the loop rate
@@ -306,4 +296,5 @@ def main(config):
 
 if __name__ == "__main__":
     config = toml.load("./config.toml")
-    main(config)
+    args = tyro.cli(Args)
+    main(config, args)

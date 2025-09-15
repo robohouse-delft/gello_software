@@ -1,22 +1,15 @@
 [env]
-agent = "gello"
-robot_port = 6001
-wrist_camera_port = 5000
-base_camera_port = 5001
-hostname = "127.0.0.1"
 freq_hz = 10
+robot_port = 6001
+hostname = "127.0.0.1"
 joint_ids=[1, 2, 3, 4, 5, 6]
 start_joints_deg = [0.0, -90.0, -90.0, -90.0, 90.0, -180.0]
 joint_signs = [1.0, 1.0, -1.0, 1.0, 1.0, 1.0]
-# joint_offsets=[3.142, 3.142, 4.712, 7.854, 3.142, -1.571]
-# '0.000', '3.142', '-1.571', '1.571', '3.142', '6.283'
 joint_offsets = [0.0, 3.142, -1.571, 1.571, 3.142, 6.283]
 gripper_config=[7, 195, 153]
-mock = false
 data_dir = "./data"
 bimanual = false
-verbose = false
-display_data = true
+dataset_type="lerobot" # gello, lerobot
 
 [robot]
 type = "ur"
@@ -33,17 +26,16 @@ z_limits_m = [0.03, 1.5]
 [camera_server]
 hostname = "127.0.0.1"
 
-[camera_clients]
-ports = [5000, 5001]
-hostname = "127.0.0.1"
+[[camera_clients]]
+name = "wrist"
+port = 5000
 
-[output]
-source_dir = "./data"
-vis = true
+[[camera_clients]]
+name = "base"
+port = 5001
 
-[lerobot]
+[inference]
 policy = "act" # act, diffusion, smolvla
-dataset_type="lerobot" # gello, lerobot
 dataset_url = "ur5e_gello_cube_v7"
 episode_idx = 0
 checkpoint_path = "/home/zico/dev/gello_software/outputs/train/act_ur5e_gello_cube_v5/checkpoints/300000/pretrained_model"

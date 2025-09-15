@@ -1,22 +1,10 @@
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import toml
-# import tyro
 
 from gello.robots.robot import BimanualRobot, PrintRobot
 from gello.zmq_core.robot_node import ZMQServerRobot
-
-
-@dataclass
-class Args:
-    robot: str = "xarm"
-    robot_port: int = 6001
-    hostname: str = "127.0.0.1"
-    robot_ip: str = "192.168.1.10"
-    no_gripper: bool = False
-
 
 def launch_robot_server(config):
     robot_config = config["robot"]
