@@ -2,7 +2,6 @@ import glob
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
 
 import numpy as np
 import toml
