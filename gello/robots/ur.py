@@ -11,6 +11,7 @@ class URRobot(Robot):
     def __init__(
         self,
         robot_ip: str,
+        state_feedback_hz: float,
         gripper: str,
         gripper_hostname: str,
         gripper_port: int,
@@ -22,11 +23,12 @@ class URRobot(Robot):
         import rtde_control
         from rtde_control import RTDEControlInterface as RTDEControl
         import rtde_receive
-
-        [print("in ur robot") for _ in range(4)]
+        self.freq_hz = 125.0
+        self.state_feedback_hz = state_feedback_hz
+        print(f"Init UR RTDE interface at {self.freq_hz} Hz with GELLO state feedback at {self.state_feedback_hz} Hz")
         try:
             self.robot = rtde_control.RTDEControlInterface(
-                robot_ip, 500.0, RTDEControl.FLAG_USE_EXT_UR_CAP
+                robot_ip, 125.0, RTDEControl.FLAG_USE_EXT_UR_CAP
             )
         except Exception as e:
             print(e)
@@ -75,8 +77,6 @@ class URRobot(Robot):
         return 6
 
     def _get_gripper_pos(self) -> float:
-        import time
-
         gripper_pos = self.gripper.get_current_position()
         assert 0 <= gripper_pos <= 255, "Gripper position must be between 0 and 255"
         return gripper_pos / 255
@@ -101,9 +101,9 @@ class URRobot(Robot):
         Args:
             joint_state (np.ndarray): The state to command the leader robot to.
         """
-        velocity = 0.5
-        acceleration = 0.5
-        dt = 1.0 / 500  # 2ms
+        velocity = 0.0
+        acceleration = 0.0
+        dt = 1.0 / self.state_feedback_hz
         lookahead_time = 0.2
         gain = 100
 
@@ -183,6 +183,7 @@ def main():
     gripper_port = 63352
     ur = URRobot(
         robot_ip,
+        10.0,
         "none",
         gripper_hostname,
         gripper_port,

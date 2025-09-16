@@ -66,6 +66,7 @@ def launch_robot_server(config):
 
             robot = URRobot(
                 robot_ip=robot_config["hostname"],
+                state_feedback_hz=env_config["freq_hz"],
                 gripper=robot_config["gripper"],
                 gripper_hostname=robot_config["gripper_hostname"],
                 gripper_port=robot_config["gripper_port"],
@@ -84,6 +85,7 @@ def launch_robot_server(config):
             # IP for the bimanual robot setup is hardcoded
             _robot_l = URRobot(
                 robot_ip="192.168.2.10",
+                state_feedback_hz=env_config["freq_hz"],
                 gripper=robot_config["gripper"],
                 gripper_hostname=robot_config["gripper_hostname"],
                 gripper_port=robot_config["gripper_port"],
@@ -94,6 +96,7 @@ def launch_robot_server(config):
             )
             _robot_r = URRobot(
                 robot_ip="192.168.2.11",
+                state_feedback_hz=env_config["freq_hz"],
                 gripper=robot_config["gripper"],
                 gripper_hostname=robot_config["gripper_hostname"],
                 gripper_port=robot_config["gripper_port"],
