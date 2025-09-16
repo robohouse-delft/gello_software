@@ -247,36 +247,40 @@ def main(config, args):
 
     print_color("\nStart 🚀🚀🚀", color="green", attrs=("bold",))
 
-    recording_start_timestamp = time.perf_counter()
+    recording_start_timestamp = time.monotonic()
     loop_rate_hz = Rate(env_config["freq_hz"])
     # prev_timestamp = 0
+    # obs_timestamp = 0
     recording = False
-    obs_timestamp = 0
     while True:
         # Act and observe
         # prev_timestamp = obs_timestamp
-        obs_timestamp = time.perf_counter()
+        # obs_timestamp = time.perf_counter()
         # print(f"loop dt: {obs_timestamp - prev_timestamp}")
         action = agent.act(obs)
         obs = env.step(action)
         # Check events from user keyboard and act appropriately
         if recorder.check_event("start_recording"):
             print("Start episode recording")
-            recording_start_timestamp = time.perf_counter()
+            recording_start_timestamp = time.monotonic()
             recording = True
             recorder.start()
         elif recorder.check_event("stop_recording"):
             print("Saving episode...", end="")
             recorder.save_episode()
+            recording = False
             print("done")
         elif recorder.check_event("discard_recording"):
             print("Discard recording")
             recorder.discard_episode()
+            recording = False
         elif recorder.check_event("quit"):
+            if recording:
+                recorder.discard_episode()
             print("Quit loop!")
             break
         if recording:
-            timestamp = obs_timestamp - recording_start_timestamp
+            timestamp = time.monotonic() - recording_start_timestamp
             recorder.add_frame(config["lerobot"]["task"], timestamp, obs, action)
         if args.display_data:
             log_rerun_data(obs, dict(np.ndenumerate(action)))
