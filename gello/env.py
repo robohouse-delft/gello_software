@@ -9,13 +9,26 @@ from gello.robots.robot import Robot
 
 class Rate:
     def __init__(self, rate: float):
-        self.last = time.perf_counter()
-        self.rate = rate
+        self.t_prev = time.monotonic()
+        self.dt = 1.0 / rate
+        self.slack_time = 0.001
 
     def sleep(self) -> None:
-        while self.last + 1.0 / self.rate > time.perf_counter():
-            time.sleep(0.0001)
-        self.last = time.perf_counter()
+        # Adapted from https://github.com/real-stanford/diffusion_policy/blob/main/diffusion_policy/common/precise_sleep.py
+        t_current = time.monotonic()
+        t_next = self.t_prev + self.dt
+        t_wait = t_next - t_current
+        if t_wait > 0:
+            t_sleep = t_wait - self.slack_time
+            if t_sleep > 0:
+                time.sleep(t_sleep)
+            while time.monotonic() < t_next:
+                pass
+        self.t_prev = time.monotonic()
+        # while self.t_prev + self.dt > time.perf_counter():
+        #     time.sleep(0.0001)
+        # self.t_prev = time.perf_counter()
+
 
 
 class RobotEnv:

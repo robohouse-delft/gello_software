@@ -47,6 +47,8 @@ class RealSenseCamera(CameraDriver):
         config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
         self._pipeline.start(config)
         self._flip = flip
+        self._latest_color_frame = None
+        self._latest_depth_frame = None
         self._lock = threading.Lock()
         self._read_thread = threading.Thread(target=self._read_frames, daemon=True)
         self._read_thread.start()

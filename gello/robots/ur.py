@@ -23,12 +23,12 @@ class URRobot(Robot):
         import rtde_control
         from rtde_control import RTDEControlInterface as RTDEControl
         import rtde_receive
-        self.freq_hz = 125.0
+        self.freq_hz = 500.0
         self.state_feedback_hz = state_feedback_hz
         print(f"Init UR RTDE interface at {self.freq_hz} Hz with GELLO state feedback at {self.state_feedback_hz} Hz")
         try:
             self.robot = rtde_control.RTDEControlInterface(
-                robot_ip, 125.0, RTDEControl.FLAG_USE_EXT_UR_CAP
+                robot_ip, self.freq_hz, RTDEControl.FLAG_USE_EXT_UR_CAP
             )
         except Exception as e:
             print(e)

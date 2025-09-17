@@ -47,7 +47,7 @@ def main(config, args):
         except KeyError:
             print("No cameras added to robot environment!")
         robot_client = ZMQClientRobot(port=env_config["robot_port"], host=env_config["hostname"])
-    env = RobotEnv(robot_client, control_rate_hz=125, camera_dict=camera_clients)
+    env = RobotEnv(robot_client, control_rate_hz=500, camera_dict=camera_clients)
 
     if args.display_data:
         _init_rerun(("recording" if args.agent == "gello" else "inference"))
@@ -188,7 +188,6 @@ def main(config, args):
         print("Going to start position")
         start_pos = np.asarray(agent.act(env.get_obs()))
         joints = obs["joint_positions"]
-
         abs_deltas = np.abs(start_pos - joints)
         id_max_joint_delta = np.argmax(abs_deltas)
 
@@ -240,9 +239,9 @@ def main(config, args):
 
         # Recording datasets
         if env_config["dataset_type"] == "gello":
-            recorder = GelloDatasetRecorder((Path(env_config["data_dir"]).expanduser() / config["lerobot"]["dataset_url"]).as_posix(), env_config["freq_hz"])
+            recorder = GelloDatasetRecorder((Path(env_config["data_dir"]).expanduser() / config["inference"]["dataset_url"]).as_posix(), env_config["freq_hz"])
         else:
-            recorder = LeRobotDatasetRecorder(config["lerobot"]["dataset_url"], env_config["freq_hz"])
+            recorder = LeRobotDatasetRecorder(config["inference"]["dataset_url"], env_config["freq_hz"], gripper_disabled=robot_config["gripper"] == "none")
 
 
     print_color("\nStart 🚀🚀🚀", color="green", attrs=("bold",))
@@ -255,7 +254,7 @@ def main(config, args):
     while True:
         # Act and observe
         # prev_timestamp = obs_timestamp
-        # obs_timestamp = time.perf_counter()
+        # obs_timestamp = time.monotonic()
         # print(f"loop dt: {obs_timestamp - prev_timestamp}")
         action = agent.act(obs)
         obs = env.step(action)
@@ -281,7 +280,7 @@ def main(config, args):
             break
         if recording:
             timestamp = time.monotonic() - recording_start_timestamp
-            recorder.add_frame(config["lerobot"]["task"], timestamp, obs, action)
+            recorder.add_frame(config["inference"]["task"], timestamp, obs, action)
         if args.display_data:
             log_rerun_data(obs, dict(np.ndenumerate(action)))
         recorder.clear_events()

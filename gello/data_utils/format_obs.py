@@ -141,12 +141,13 @@ class GelloDatasetRecorder(DataController):
         self.out_dir = None
 
 class LeRobotDatasetRecorder(DataController):
-    def __init__(self, repo_name: str, fps: int):
+    def __init__(self, repo_name: str, fps: int, gripper_disabled = False):
         super().__init__()
         dataset_path = Path.home() / ".cache/huggingface/lerobot" / repo_name
+        self.gripper_disabled = gripper_disabled
         if dataset_path.exists():
             print(f"Using existing dataset folder: {dataset_path}")
-            self.dataset = LeRobotDataset(repo_id=str(dataset_path), tolerance_s=0.003)
+            self.dataset = LeRobotDataset(repo_id=str(dataset_path), tolerance_s=0.01)
             self.dataset.start_image_writer(
                 num_processes=0,
                 num_threads=16,
@@ -158,7 +159,7 @@ class LeRobotDatasetRecorder(DataController):
                 features=GELLO_FEATURES,
                 image_writer_threads=16,
                 image_writer_processes=0,
-                tolerance_s=0.003,
+                tolerance_s=0.01,
             )
     
     def start(self) -> None:
@@ -171,6 +172,9 @@ class LeRobotDatasetRecorder(DataController):
             obs: Dict[str, np.ndarray],
             action: np.ndarray) -> None:
         obs["control"] = action # add action to obs
+        if self.gripper_disabled:
+            obs["control"] = np.append(obs["control"], [0.0])
+            obs["joint_positions"] = np.append(obs["joint_positions"], [0.0])
         frame = to_lerobot_frame(obs)
         self.dataset.add_frame(frame, task, timestamp=timestamp)
     

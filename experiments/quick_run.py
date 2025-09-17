@@ -29,7 +29,7 @@ def start_robot_process(config):
     process.start()
 
 def start_camera_process(config):
-    process = Process(target=camera_main, args=(config, ))
+    process = Process(target=camera_main, args=(config["camera_server"], ))
 
     # Function to kill the child process
     def kill_child_process(process):
